@@ -1,0 +1,40 @@
+[project]
+name = "hackstack-pipeline"
+version = "0.1.0"
+description = "Pipeline de collecte et transformation pour hackstack"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "selectolax>=0.3.21",
+    "polars>=1.0",
+    "psycopg[binary]>=3.2",
+    "pyyaml>=6.0",
+    "sentence-transformers>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.11",
+    "ruff>=0.6",
+    "pytest>=8.0",
+    "types-pyyaml>=6.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["pipeline", "api"]
+
+[[tool.mypy.overrides]]
+module = ["sentence_transformers.*", "selectolax.*"]
+ignore_missing_imports = true
