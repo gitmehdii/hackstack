@@ -62,6 +62,52 @@ class ProjectDetail(BaseModel):
     scraped_at: datetime
 
 
+class SearchHit(BaseModel):
+    """Un résultat de recherche : une vue courte du projet + le score de fusion.
+
+    `score` est le score de Reciprocal Rank Fusion (sans unité, croissant = plus
+    pertinent), fourni pour le tri et le débogage, pas pour un affichage brut.
+    """
+
+    id: str
+    source: str
+    source_url: str
+    title: str
+    description_excerpt: str | None
+    hackathon_slug: str
+    hackathon_name: str
+    is_winner: bool
+    placement: int | None
+    tech_stack: list[str]
+    score: float
+
+
+class SearchResponse(BaseModel):
+    """Réponse de `/search` : la requête normalisée et les résultats ordonnés."""
+
+    query: str
+    total: int
+    hits: list[SearchHit]
+
+
+class SimilarProject(BaseModel):
+    """Projet voisin (page projet, section « projets similaires »).
+
+    `distance` est la distance cosine (0 = identique, 2 = opposé) issue de pgvector.
+    """
+
+    id: str
+    source: str
+    source_url: str
+    title: str
+    hackathon_slug: str
+    hackathon_name: str
+    is_winner: bool
+    placement: int | None
+    tech_stack: list[str]
+    distance: float
+
+
 class HackathonAlternative(BaseModel):
     """Autre hackathon partageant le même slug (autre source)."""
 

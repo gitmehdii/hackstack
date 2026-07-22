@@ -15,7 +15,9 @@ et analyse de tendances. Voir [PROJECT.md](PROJECT.md) pour la vision complète.
 - [x] **Étape 2 — Site en lecture seule** : API FastAPI (`/projects/{id}`,
       `/hackathons/{slug}`, `/stats`) et front Next.js (pages projet + hackathon en ISR),
       déployable et consultable. Cf. [STATE.md](STATE.md).
-- [ ] Étape 3 — Recherche hybride
+- [x] **Étape 3 — Recherche hybride** : `/search` (vecteur pgvector + full-text, fusion
+      RRF) avec filtres, page `/search` client-side, « projets similaires » sur la page
+      projet. Backfill des embeddings sur les 21k projets en cours. Cf. [STATE.md](STATE.md).
 - [ ] Étape 4 — Thèmes & tech stack
 - [ ] Étape 5 — Trends
 - [ ] Étape 6 — Pipeline de rescrape
@@ -75,8 +77,31 @@ n'est pas unique globalement — 2 slugs du corpus existent sur 2 sources, la so
 plus fournie est choisie et les autres exposées en `alternatives`), `GET /stats`,
 `GET /health`.
 
-Pages : `/` (chiffres), `/project/[id]`, `/hackathon/[slug]` — les deux dernières en ISR
-(`revalidate` 24 h, génération à la demande), avec métadonnées Open Graph.
+Pages : `/` (chiffres + recherche), `/project/[id]`, `/hackathon/[slug]` — les deux
+dernières en ISR (`revalidate` 24 h, génération à la demande), avec métadonnées Open Graph.
+
+## Recherche (Étape 3)
+
+Recherche **hybride** : le bras vectoriel (pgvector `<=>`, index HNSW) et le bras
+full-text (`websearch_to_tsquery` sur `fts`, index GIN) sont fusionnés par **Reciprocal
+Rank Fusion** dans une seule requête SQL. La requête texte est vectorisée à la volée par
+bge-m3 (même modèle que les embeddings), chargé à la demande dans le process API.
+
+```bash
+# nécessite l'API lancée + des embeddings générés (python -m pipeline.embed.embed)
+curl "http://localhost:8099/search?q=ai+agent+for+trading&winners_only=true&limit=5"
+curl "http://localhost:8099/projects/{id}/similar"
+```
+
+Endpoints : `GET /search?q=&source=&winners_only=&since=&until=&limit=` (fusion RRF,
+filtres), `GET /projects/{id}/similar` (voisins cosine).
+
+Page `/search` : client-side, filtres source/gagnants, état synchronisé à l'URL. Le fetch
+passe par un Route Handler proxy (`web/app/api/search/route.ts`) pour garder `API_URL`
+privée. Section « projets similaires » sur chaque page projet.
+
+> Le bras vectoriel se dégrade proprement en full-text seul quand un projet n'a pas encore
+> d'embedding : la recherche reste utilisable pendant le backfill des 21k embeddings.
 
 **Déploiement** (cible PROJECT.md) : front sur Vercel (`web/`, variables `API_URL` +
 `SITE_URL`, `API_URL` pointant vers l'API publique), API sur un VPS (`DATABASE_URL` +

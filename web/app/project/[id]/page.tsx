@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PlacementBadge, SourceBadge, TechChips, sourceLabel } from "@/components/badges";
-import { getProject } from "@/lib/api";
+import { getProject, getSimilar, type SimilarProject } from "@/lib/api";
 
 // ISR : pages générées à la demande puis mises en cache 24 h.
 export const revalidate = 86400;
@@ -50,12 +50,33 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
   );
 }
 
+function SimilarCard({ project }: { project: SimilarProject }) {
+  return (
+    <Link
+      href={`/project/${encodeURIComponent(project.id)}`}
+      className="block rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 hover:border-neutral-400 dark:hover:border-neutral-600"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-medium line-clamp-2">{project.title}</span>
+        <PlacementBadge placement={project.placement} isWinner={project.is_winner} />
+      </div>
+      <div className="mt-1 text-xs text-neutral-500 truncate">{project.hackathon_name}</div>
+      {project.tech_stack.length > 0 && (
+        <div className="mt-2">
+          <TechChips items={project.tech_stack.slice(0, 4)} />
+        </div>
+      )}
+    </Link>
+  );
+}
+
 export default async function ProjectPage({ params }: Params) {
   const { id } = await params;
   const project = await getProject(id);
   if (!project) {
     notFound();
   }
+  const similar = await getSimilar(id);
 
   return (
     <article className="space-y-8">
@@ -105,6 +126,17 @@ export default async function ProjectPage({ params }: Params) {
         {project.repo_url && <ExternalLink href={project.repo_url} label="Code" />}
         {project.demo_url && <ExternalLink href={project.demo_url} label="Démo" />}
       </section>
+
+      {similar.length > 0 && (
+        <section className="space-y-3 border-t border-neutral-200 dark:border-neutral-800 pt-8">
+          <h2 className="text-sm font-medium text-neutral-500">Projets similaires</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {similar.map((s) => (
+              <SimilarCard key={s.id} project={s} />
+            ))}
+          </div>
+        </section>
+      )}
     </article>
   );
 }

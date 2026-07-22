@@ -99,3 +99,70 @@ reste en suspens.
   (build vert), pas encore déployé sur Vercel/VPS.
 - **Slug ambigu** : la page ne montre que la source principale ; pas de page distincte
   pour l'alternative (URL identique). Acceptable (2 cas), documenté.
+
+---
+
+## Étape 3 — Recherche ✅
+
+**Statut : terminée** (code). Branche `etape-3-recherche`. Backfill embeddings en cours
+(voir *En suspens*).
+
+### Fait
+
+- **Recherche hybride `/search`** (`api/queries/search.py`) — bras **vectoriel** (pgvector
+  `<=>`, index HNSW) + bras **full-text** (`websearch_to_tsquery` sur `fts`, index GIN),
+  fusionnés par **Reciprocal Rank Fusion** (`k=60`) dans **une seule requête SQL** (deux
+  CTE + `FULL OUTER JOIN`, `1/(k+rang)`). RRF ne dépend que des rangs → pas de
+  normalisation de scores hétérogènes. Filtres `source` (répétable), `winners_only`,
+  `since`/`until`, `limit`. SQL écrit à la main (pas d'ORM masquant le vectoriel).
+- **Encodeur de requête** (`api/search_encoder.py`) — bge-m3 chargé une fois, à la
+  demande (singleton + verrou async, double-checked locking), encodage hors event loop
+  (`asyncio.to_thread`). Même modèle que le pipeline → vecteurs comparables. Le bras
+  vectoriel se **désactive proprement** si `query_vector` est None (CTE vide typée) : la
+  recherche retombe sur le full-text seul, sans erreur.
+- **Projets similaires** (`GET /projects/{id}/similar`, `api/queries/projects.py`) — plus
+  proches voisins cosine hors soi-même ; liste vide (pas de 404) si le projet n'a pas
+  encore d'embedding.
+- **Front** — page **`/search`** client-side (`web/components/search-client.tsx` +
+  wrapper `Suspense`) : champ + filtres source/gagnants, **état synchronisé à l'URL**
+  (résultats partageables/navigables, back-button). Le fetch passe par un **Route Handler
+  proxy** `web/app/api/search/route.ts` (`API_URL` reste **privée**, pas de CORS navigateur,
+  whitelist des paramètres). Section **« Projets similaires »** sur la page projet (rendu
+  serveur, mis en cache avec l'ISR). Champ de recherche sur `/` (formulaire natif) + lien
+  nav. `line-clamp` (Tailwind v4).
+- **Qualité** — `ruff` + `mypy --strict` clean, **17 tests** verts (dont
+  `tests/test_search_filters.py` sur le constructeur de filtres). Vérifié end-to-end dans
+  le navigateur : `/search` (requête + filtres, URL sync), page projet + similaires.
+  Latence à chaud ~0,4 s (premier appel ~15 s = chargement du modèle).
+
+### Décisions prises
+
+| Sujet | Décision | Raison |
+|---|---|---|
+| Fusion vecteur/lexical | **RRF** (`k=60`), pas de combinaison de scores bruts | Distance cosine et `ts_rank_cd` non comparables ; RRF ne dépend que des rangs |
+| Vivier par bras | 200 candidats/bras avant fusion (`_CANDIDATES_PER_ARM`) | Assez large devant `limit` pour une vraie fusion, petit devant le corpus |
+| Encodage de la requête | bge-m3 **dans le process API**, lazy + hors event loop | Un seul modèle, cohérent avec les embeddings ; pas de service séparé (overkill) |
+| `/search` client-side | Fetch via **Route Handler proxy** Next, pas d'appel navigateur direct | Garde `API_URL` privée (invariant Étape 2), évite d'exposer l'API + config CORS |
+| Filtres `theme`/`date` dans l'UI | **Non exposés** (seulement source/gagnants) | `theme_tags` vide (Étape 4) et `hackathon_date` NULL (Étape 6) : filtrer sur du vide tromperait |
+| API `since`/`until` | **Implémentés** au contrat même sans données | Corrects dès que les dates seront backfillées (Étape 6) ; excluent naturellement les NULL |
+| Bras vectoriel si embeddings absents | Dégradation en full-text seul (CTE vide) | La recherche marche pendant le backfill des 21k embeddings |
+
+### En suspens / dette connue
+
+- **Backfill embeddings en cours** — lancé sur les 21 027 projets (`python -m
+  pipeline.embed.embed`, idempotent, `embedding IS NULL`). Sur CPU 8 cœurs : ~0,5 doc/s,
+  **ETA ~11 h**. Tant qu'il n'est pas fini, la recherche est **full-text + vectoriel
+  partiel** (qualité sémantique croissante à mesure du remplissage). Aucun GPU dispo ;
+  les descriptions sont courtes (max ~980 tokens), donc rien à tronquer — la lenteur est
+  inhérente au modèle.
+- **Descriptions polluées** (résidus de payload RSC `_next/static/chunks/...` dans
+  quelques descriptions scrapées, ex. « ML memecoin AI Agent ») remontent dans l'extrait.
+  Dette de **corpus** (pas de la recherche) — à nettoyer au rescrape (Étape 6) ou par une
+  passe de nettoyage `pipeline/normalize/`.
+- **Chargement du modèle au 1ᵉʳ `/search`** (~15 s, ~2 Go RAM) : lazy pour ne pas peser
+  sur `/health` et le démarrage. Sur VPS contraint, envisager un warm-up au *lifespan* ou
+  un modèle plus léger si la latence du premier appel gêne.
+- **Sitemap complet** (hérité de l'Étape 2) : toujours pas d'endpoint de listing ;
+  `/search` n'en fournit pas. À traiter quand le SEO deviendra prioritaire.
+- **`total` de `/search`** = nombre de hits renvoyés (borné par `limit`), pas un vrai
+  total corpus. Pas de pagination (hors périmètre PROJECT.md).
