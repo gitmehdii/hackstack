@@ -17,15 +17,29 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-10">
-      <section className="space-y-3">
+      <section className="space-y-4">
         <h1 className="text-3xl font-bold tracking-tight">
           Ce qui gagne les hackathons.
         </h1>
         <p className="max-w-2xl text-neutral-600 dark:text-neutral-300">
           Une base de données des projets primés sur lablab.ai, Devpost et ETHGlobal.
-          Explore les palmarès, les stacks et — bientôt — la recherche sémantique et les
-          tendances.
+          Cherche par idée, problème ou technologie — la recherche combine sémantique et
+          mots-clés.
         </p>
+        <form action="/search" method="get" className="flex max-w-2xl gap-2">
+          <input
+            type="search"
+            name="q"
+            placeholder="Rechercher un projet, une idée, une techno…"
+            className="flex-1 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-transparent px-4 py-2.5 outline-none focus:border-neutral-500"
+          />
+          <button
+            type="submit"
+            className="rounded-lg bg-neutral-900 dark:bg-neutral-100 px-5 py-2.5 text-sm font-medium text-neutral-100 dark:text-neutral-900 hover:opacity-90"
+          >
+            Rechercher
+          </button>
+        </form>
       </section>
 
       {stats && (
@@ -38,9 +52,8 @@ export default async function HomePage() {
       )}
 
       <section className="text-sm text-neutral-500">
-        La recherche et les pages de tendances arrivent aux étapes suivantes. Pour
-        l&apos;instant, accède à un projet via son identifiant ou à un hackathon via son
-        slug.
+        Les pages de tendances (volume par thème, stacks gagnantes) arrivent aux étapes
+        suivantes.
       </section>
     </div>
   );

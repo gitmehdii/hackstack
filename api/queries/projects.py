@@ -30,6 +30,13 @@ _SUMMARY_COLUMNS = """
     team_name, tech_stack, repo_url, demo_url
 """
 
+# Colonnes d'un projet voisin (section « projets similaires »).
+_SIMILAR_COLUMNS = """
+    p.id, p.source, p.source_url, p.title,
+    p.hackathon_slug, p.hackathon_name,
+    p.is_winner, p.placement, p.tech_stack
+"""
+
 
 async def get_project(conn: AsyncConnection, project_id: str) -> dict[str, Any] | None:
     async with conn.cursor() as cur:
@@ -57,6 +64,32 @@ async def get_projects_for_hackathon(
                 title ASC
             """,  # noqa: S608 (constante interne)
             (source, slug),
+        )
+        rows = await cur.fetchall()
+    return rows  # type: ignore[return-value]
+
+
+async def get_similar_projects(
+    conn: AsyncConnection, project_id: str, limit: int = 6
+) -> list[dict[str, Any]]:
+    """Plus proches voisins cosine d'un projet (hors lui-même).
+
+    Renvoie une liste vide si le projet est introuvable ou n'a pas encore d'embedding
+    (rien à comparer). Utilise l'index HNSW via l'opérateur `<=>`.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            f"""
+            SELECT {_SIMILAR_COLUMNS}, p.embedding <=> src.embedding AS distance
+            FROM projects p,
+                 (SELECT embedding FROM projects WHERE id = %(id)s) src
+            WHERE p.id <> %(id)s
+              AND p.embedding IS NOT NULL
+              AND src.embedding IS NOT NULL
+            ORDER BY p.embedding <=> src.embedding
+            LIMIT %(limit)s
+            """,  # noqa: S608 (constante interne)
+            {"id": project_id, "limit": limit},
         )
         rows = await cur.fetchall()
     return rows  # type: ignore[return-value]

@@ -75,6 +75,39 @@ export type Stats = {
   sources: number;
 };
 
+export type SearchHit = {
+  id: string;
+  source: string;
+  source_url: string;
+  title: string;
+  description_excerpt: string | null;
+  hackathon_slug: string;
+  hackathon_name: string;
+  is_winner: boolean;
+  placement: number | null;
+  tech_stack: string[];
+  score: number;
+};
+
+export type SearchResponse = {
+  query: string;
+  total: number;
+  hits: SearchHit[];
+};
+
+export type SimilarProject = {
+  id: string;
+  source: string;
+  source_url: string;
+  title: string;
+  hackathon_slug: string;
+  hackathon_name: string;
+  is_winner: boolean;
+  placement: number | null;
+  tech_stack: string[];
+  distance: number;
+};
+
 async function fetchJson<T>(path: string): Promise<T | null> {
   const res = await fetch(`${apiBaseUrl()}${path}`, {
     next: { revalidate: REVALIDATE_SECONDS },
@@ -99,4 +132,31 @@ export function getHackathon(slug: string): Promise<HackathonDetail | null> {
 
 export async function getStats(): Promise<Stats | null> {
   return fetchJson<Stats>(`/stats`);
+}
+
+// Projets similaires : rendu côté serveur sur la page projet (donc mis en cache ISR
+// avec elle). Renvoie [] si l'API échoue ou si le projet n'a pas encore d'embedding.
+export async function getSimilar(id: string, limit = 6): Promise<SimilarProject[]> {
+  const res = await fetch(
+    `${apiBaseUrl()}/projects/${encodeURIComponent(id)}/similar?limit=${limit}`,
+    { next: { revalidate: REVALIDATE_SECONDS }, headers: { accept: "application/json" } },
+  );
+  if (!res.ok) {
+    return [];
+  }
+  return (await res.json()) as SimilarProject[];
+}
+
+// Recherche : appelée côté serveur par le Route Handler /api/search, qui relaie la
+// query string du client vers l'API. `qs` est déjà encodé (URLSearchParams). Pas de
+// cache : les résultats de recherche sont dynamiques.
+export async function searchProjects(qs: string): Promise<SearchResponse> {
+  const res = await fetch(`${apiBaseUrl()}/search?${qs}`, {
+    cache: "no-store",
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`API /search → ${res.status}`);
+  }
+  return (await res.json()) as SearchResponse;
 }

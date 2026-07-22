@@ -28,7 +28,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="font-semibold tracking-tight text-lg">
               hackstack
             </Link>
-            <span className="text-sm text-neutral-500">projets de hackathon</span>
+            <Link
+              href="/search"
+              className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+            >
+              Recherche
+            </Link>
           </div>
         </header>
         <main className="flex-1">

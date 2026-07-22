@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import cors_origins
 from api.db import make_pool
-from api.routers import hackathons, projects, stats
+from api.routers import hackathons, projects, search, stats
 
 
 @asynccontextmanager
@@ -44,6 +44,7 @@ app.add_middleware(
 
 app.include_router(projects.router)
 app.include_router(hackathons.router)
+app.include_router(search.router)
 app.include_router(stats.router)
 
 
