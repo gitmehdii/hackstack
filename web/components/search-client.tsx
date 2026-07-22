@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { PlacementBadge, SourceBadge, TechChips, sourceLabel } from "@/components/badges";
+import { PlacementBadge, TechChips, sourceLabel } from "@/components/badges";
 import type { SearchHit, SearchResponse } from "@/lib/api";
 
 const SOURCES = ["lablab", "devpost", "ethglobal"] as const;
@@ -61,6 +61,15 @@ export function SearchClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
+  // Resynchronise les champs sur l'URL quand elle change hors saisie (back/forward, lien
+  // partagé). `params` ne bouge qu'après un push (submit/toggle), jamais pendant la frappe,
+  // donc ceci n'écrase pas ce que l'utilisateur est en train de taper.
+  useEffect(() => {
+    setInput(params.get("q") ?? "");
+    setSources(params.getAll("source"));
+    setWinnersOnly(params.get("winners_only") === "true");
+  }, [params]);
+
   // Récrit l'URL à partir de l'état du formulaire ; le fetch est déclenché par le
   // changement d'URL (effet ci-dessous), pas directement, pour rester navigable.
   const pushSearch = useCallback(
@@ -90,11 +99,17 @@ export function SearchClient() {
         if (!res.ok) throw new Error(String(res.status));
         return res.json() as Promise<SearchResponse>;
       })
-      .then((json) => setData(json))
-      .catch((err) => {
-        if (err.name !== "AbortError") setError(true);
+      .then((json) => {
+        setData(json);
+        setLoading(false);
       })
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        // Une requête abandonnée (URL changée entre-temps) ne doit ni afficher d'erreur
+        // ni éteindre le spinner : la requête la plus récente reste en cours.
+        if (err.name === "AbortError") return;
+        setError(true);
+        setLoading(false);
+      });
     return () => controller.abort();
   }, [params]);
 
@@ -127,6 +142,7 @@ export function SearchClient() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Rechercher un projet, une idée, une techno…"
+            aria-label="Rechercher un projet"
             autoFocus
             className="flex-1 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-transparent px-4 py-2.5 outline-none focus:border-neutral-500"
           />

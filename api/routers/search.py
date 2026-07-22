@@ -6,6 +6,7 @@ avec le full-text par Reciprocal Rank Fusion dans une seule requête SQL (cf. qu
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Annotated, Any
 
@@ -20,6 +21,7 @@ from api.queries.search import search_projects
 from api.search_encoder import encode_query
 
 router = APIRouter(tags=["search"])
+logger = logging.getLogger(__name__)
 
 _ALLOWED_SOURCES = {"lablab", "devpost", "ethglobal"}
 
@@ -52,11 +54,25 @@ async def search(
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> SearchResponse:
     q = q.strip()
-    # On ignore les sources hors taxonomie plutôt que d'échouer : un filtre inconnu ne
-    # doit pas casser la recherche, juste ne rien matcher.
-    sources = [s for s in source if s in _ALLOWED_SOURCES] if source else None
+    # Filtre source : si `source` est fourni mais ne contient que des valeurs hors
+    # taxonomie, on court-circuite à vide (le filtre ne matche rien), plutôt que de le
+    # laisser retomber en « aucun filtre » (ce qui renverrait toutes les sources).
+    if source is not None:
+        sources = [s for s in source if s in _ALLOWED_SOURCES]
+        if not sources:
+            return SearchResponse(query=q, total=0, hits=[])
+    else:
+        sources = None
 
-    query_vector = await encode_query(q)
+    # Dégradation gracieuse : si l'encodage de la requête échoue (modèle indisponible,
+    # OOM…), on retombe sur le full-text seul (search_projects accepte query_vector=None)
+    # au lieu de renvoyer un 500.
+    try:
+        query_vector: list[float] | None = await encode_query(q)
+    except Exception:
+        logger.warning("encode_query a échoué, repli sur le full-text seul", exc_info=True)
+        query_vector = None
+
     rows = await search_projects(
         conn,
         q,

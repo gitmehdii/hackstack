@@ -31,6 +31,7 @@ export default async function HomePage() {
             type="search"
             name="q"
             placeholder="Rechercher un projet, une idée, une techno…"
+            aria-label="Rechercher un projet"
             className="flex-1 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-transparent px-4 py-2.5 outline-none focus:border-neutral-500"
           />
           <button
