@@ -1,0 +1,197 @@
+# Taxonomie fermée de TECH_STACK (Étape 4).
+#
+# Vocabulaire contrôlé : projects.tech_stack ne contient QUE des valeurs de `canonical`.
+# Plus riche que themes.yaml (le nombre de technos n'a pas le même effet de dilution que
+# les thèmes), mais reste fermé. Toute valeur produite par une passe d'extraction qui
+# n'est pas dans `canonical` est rejetée (cf. pipeline/normalize/taxonomy.py).
+#
+# `aliases` : variantes rencontrées dans les manifestes GitHub / langages / prompts LLM,
+# mappées (en minuscules) vers la valeur canonique. Sert à la passe GitHub pour normaliser
+# les noms de paquets et de langages détectés. La passe LLM reçoit directement la liste
+# canonique et n'est censée renvoyer que ces valeurs.
+
+version: 1
+
+canonical:
+  languages:
+    - Python
+    - JavaScript
+    - TypeScript
+    - Solidity
+    - Rust
+    - Go
+    - Java
+    - Kotlin
+    - Swift
+    - "C++"
+    - "C#"
+    - Ruby
+    - PHP
+    - Dart
+    - Move
+    - Cairo
+  ai-models:
+    - GPT-4
+    - GPT-3.5
+    - Claude
+    - Gemini
+    - Llama
+    - Mistral
+    - Cohere
+    - Whisper
+    - Stable Diffusion
+    - DALL-E
+    - Grok
+    - DeepSeek
+  ai-frameworks:
+    - LangChain
+    - LlamaIndex
+    - Hugging Face
+    - PyTorch
+    - TensorFlow
+    - Keras
+    - scikit-learn
+    - spaCy
+    - OpenCV
+    - CrewAI
+    - AutoGen
+    - Ollama
+    - Groq
+    - Replicate
+  vector-db:
+    - Pinecone
+    - Qdrant
+    - Weaviate
+    - Chroma
+    - Milvus
+    - pgvector
+  web-frontend:
+    - React
+    - Next.js
+    - Vue
+    - Nuxt
+    - Svelte
+    - Angular
+    - React Native
+    - Flutter
+    - Tailwind CSS
+    - Expo
+  backend:
+    - Node.js
+    - FastAPI
+    - Flask
+    - Django
+    - Express
+    - Spring
+    - Ruby on Rails
+    - Streamlit
+    - Gradio
+    - GraphQL
+  databases:
+    - PostgreSQL
+    - MySQL
+    - MongoDB
+    - Redis
+    - SQLite
+    - Supabase
+    - Firebase
+  cloud-infra:
+    - AWS
+    - Google Cloud
+    - Azure
+    - Vercel
+    - Cloudflare
+    - Docker
+    - Kubernetes
+    - Modal
+  blockchain:
+    - Ethereum
+    - Solana
+    - Polygon
+    - Base
+    - Arbitrum
+    - Optimism
+    - Scroll
+    - Avalanche
+    - IPFS
+    - Filecoin
+    - The Graph
+    - Chainlink
+    - ENS
+    - Hardhat
+    - Foundry
+    - ethers.js
+    - web3.js
+    - wagmi
+    - viem
+    - WalletConnect
+    - Worldcoin
+    - Push Protocol
+    - Lens Protocol
+  voice-comms:
+    - ElevenLabs
+    - Twilio
+    - Deepgram
+    - AssemblyAI
+  payments:
+    - Stripe
+    - Circle
+
+# variante (minuscule) -> valeur canonique. Utilisé par la passe GitHub.
+aliases:
+  py: Python
+  python3: Python
+  js: JavaScript
+  node: Node.js
+  nodejs: Node.js
+  ts: TypeScript
+  golang: Go
+  "c++": "C++"
+  cpp: "C++"
+  "c#": "C#"
+  csharp: "C#"
+  rails: Ruby on Rails
+  nextjs: Next.js
+  "next.js": Next.js
+  react-native: React Native
+  reactnative: React Native
+  tailwindcss: Tailwind CSS
+  tailwind: Tailwind CSS
+  fast-api: FastAPI
+  fastapi: FastAPI
+  huggingface: Hugging Face
+  "hugging-face": Hugging Face
+  transformers: Hugging Face
+  torch: PyTorch
+  pytorch: PyTorch
+  tensorflow: TensorFlow
+  sklearn: scikit-learn
+  "scikit-learn": scikit-learn
+  opencv-python: OpenCV
+  langchain: LangChain
+  llama-index: LlamaIndex
+  llamaindex: LlamaIndex
+  openai: GPT-4
+  anthropic: Claude
+  "google-generativeai": Gemini
+  postgres: PostgreSQL
+  postgresql: PostgreSQL
+  psycopg: PostgreSQL
+  "psycopg2": PostgreSQL
+  mongo: MongoDB
+  mongoose: MongoDB
+  pymongo: MongoDB
+  ethers: ethers.js
+  web3: web3.js
+  "solidity": Solidity
+  hardhat: Hardhat
+  "@openzeppelin/contracts": Solidity
+  wagmi: wagmi
+  viem: viem
+  supabase: Supabase
+  firebase: Firebase
+  "firebase-admin": Firebase
+  stripe: Stripe
+  twilio: Twilio
+  elevenlabs: ElevenLabs
+  deepgram: Deepgram

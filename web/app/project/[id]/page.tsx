@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { PlacementBadge, SourceBadge, TechChips, sourceLabel } from "@/components/badges";
+import {
+  PlacementBadge,
+  SourceBadge,
+  TechChips,
+  ThemeChips,
+  sourceLabel,
+} from "@/components/badges";
 import { getProject, getSimilar, type SimilarProject } from "@/lib/api";
 
 // ISR : pages générées à la demande puis mises en cache 24 h.
@@ -118,6 +124,13 @@ export default async function ProjectPage({ params }: Params) {
         <section className="space-y-2">
           <h2 className="text-sm font-medium text-neutral-500">Stack</h2>
           <TechChips items={project.tech_stack} />
+        </section>
+      )}
+
+      {project.theme_tags.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-medium text-neutral-500">Thèmes</h2>
+          <ThemeChips slugs={project.theme_tags} />
         </section>
       )}
 

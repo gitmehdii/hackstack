@@ -28,12 +28,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="font-semibold tracking-tight text-lg">
               hackstack
             </Link>
-            <Link
-              href="/search"
-              className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
-            >
-              Recherche
-            </Link>
+            <nav className="flex items-center gap-4">
+              <Link
+                href="/themes"
+                className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+              >
+                Thèmes
+              </Link>
+              <Link
+                href="/search"
+                className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+              >
+                Recherche
+              </Link>
+            </nav>
           </div>
         </header>
         <main className="flex-1">

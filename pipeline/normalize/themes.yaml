@@ -1,0 +1,140 @@
+# Taxonomie fermée de THÈMES (Étape 4).
+#
+# Volontairement PLATE et COURTE (30–50 entrées, pas de hiérarchie). Une taxonomie qui
+# gonfle produit des pages /theme/[slug] avec 4 projets chacune, inutilisables. Un projet
+# porte AU PLUS `max_per_project` thèmes (cf. pipeline/normalize/llm_extract.py).
+#
+# `slug` = identifiant stable, sert d'URL (/theme/[slug]) et de valeur dans
+# projects.theme_tags. `label` + `description` : affichage et amorçage du prompt LLM.
+# Ne jamais renommer un slug sans migration : c'est une clé d'URL publique.
+
+version: 1
+max_per_project: 3
+
+themes:
+  - slug: generative-ai
+    label: Generative AI
+    description: Génération de contenu (texte, image, audio, vidéo) par modèles génératifs.
+  - slug: conversational-ai
+    label: Conversational AI
+    description: Chatbots, assistants, interfaces vocales ou en langage naturel.
+  - slug: ai-agents
+    label: AI Agents
+    description: Agents autonomes ou multi-agents, systèmes utilisant des outils.
+  - slug: computer-vision
+    label: Computer Vision
+    description: Compréhension d'images ou de vidéos, détection, OCR.
+  - slug: speech-audio
+    label: Speech & Audio AI
+    description: Reconnaissance vocale, synthèse, traitement audio.
+  - slug: search-rag
+    label: Search & RAG
+    description: Recherche sémantique, RAG, bases de connaissances.
+  - slug: recommendation
+    label: Recommendation & Personalization
+    description: Systèmes de recommandation et de personnalisation.
+  - slug: data-analytics
+    label: Data & Analytics
+    description: Tableaux de bord, BI, visualisation, insights.
+  - slug: developer-tools
+    label: Developer Tools
+    description: Outillage développeur, SDK, assistants de code, CI/CD.
+  - slug: cybersecurity
+    label: Cybersecurity
+    description: Sécurité, détection de menaces, authentification, chiffrement.
+  - slug: privacy
+    label: Privacy
+    description: Technologies préservant la vie privée, anonymisation.
+  - slug: defi
+    label: DeFi
+    description: "Finance décentralisée : prêt, DEX, staking, rendement."
+  - slug: nft-digital-assets
+    label: NFTs & Digital Assets
+    description: NFT, objets de collection numériques, tokenisation d'actifs.
+  - slug: dao-governance
+    label: DAOs & Governance
+    description: DAO, gouvernance on-chain, vote.
+  - slug: crypto-payments
+    label: Crypto Payments
+    description: Portefeuilles, paiements crypto, transferts, stablecoins.
+  - slug: zero-knowledge
+    label: Zero-Knowledge
+    description: Preuves à divulgation nulle, cryptographie préservant la confidentialité.
+  - slug: blockchain-infra
+    label: Blockchain Infrastructure
+    description: L1/L2, ponts, oracles, infrastructure de nœuds.
+  - slug: digital-identity
+    label: Digital Identity
+    description: Identité, attestations, vérification, réputation.
+  - slug: fintech
+    label: Fintech
+    description: Banque, budget, investissement, assurance (hors crypto).
+  - slug: healthcare
+    label: Healthcare
+    description: Médical, diagnostic, soins, télémédecine.
+  - slug: mental-health
+    label: Mental Health
+    description: Bien-être, santé mentale, méditation, thérapie.
+  - slug: accessibility
+    label: Accessibility
+    description: Technologies d'assistance, conception inclusive, handicap.
+  - slug: education
+    label: Education
+    description: Apprentissage, tutorat, edtech, cours.
+  - slug: climate-sustainability
+    label: Climate & Sustainability
+    description: Climat, carbone, recyclage, environnement.
+  - slug: energy
+    label: Energy
+    description: Énergie propre, réseau, efficacité énergétique.
+  - slug: agriculture-food
+    label: Agriculture & Food
+    description: Agriculture, chaîne alimentaire, nutrition.
+  - slug: smart-cities-iot
+    label: Smart Cities & IoT
+    description: IoT, capteurs, objets connectés, urbanisme.
+  - slug: transportation-mobility
+    label: Transportation & Mobility
+    description: Mobilité, logistique, livraison, véhicules autonomes.
+  - slug: supply-chain
+    label: Supply Chain
+    description: Logistique, traçabilité, provenance.
+  - slug: ecommerce-retail
+    label: E-commerce & Retail
+    description: Achat, marketplaces, commerce de détail.
+  - slug: gaming
+    label: Gaming
+    description: Jeux, développement de jeux, esports.
+  - slug: ar-vr-metaverse
+    label: AR / VR / Metaverse
+    description: Réalité augmentée ou virtuelle, spatial, métavers.
+  - slug: robotics-hardware
+    label: Robotics & Hardware
+    description: Robots, drones, embarqué, matériel.
+  - slug: social-community
+    label: Social & Community
+    description: Réseaux sociaux, communauté, communication.
+  - slug: content-creation
+    label: Content Creation
+    description: Outils de créateurs, production média, outils de design.
+  - slug: music-art
+    label: Music & Art
+    description: Musique, art audio, art génératif.
+  - slug: productivity
+    label: Productivity
+    description: Gestion de tâches et de temps, collaboration, notes.
+  - slug: civic-government
+    label: Civic & Government
+    description: Govtech, services publics, transparence.
+  - slug: disaster-humanitarian
+    label: Disaster & Humanitarian
+    description: Réponse aux catastrophes, crise, aide humanitaire.
+  - slug: legal-compliance
+    label: Legal & Compliance
+    description: Legaltech, contrats, conformité réglementaire.
+  - slug: hr-future-of-work
+    label: HR & Future of Work
+    description: Recrutement, main-d'œuvre, emploi.
+  - slug: travel-tourism
+    label: Travel & Tourism
+    description: Voyage, hôtellerie, tourisme.

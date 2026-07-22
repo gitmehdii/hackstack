@@ -166,3 +166,74 @@ reste en suspens.
   `/search` n'en fournit pas. À traiter quand le SEO deviendra prioritaire.
 - **`total` de `/search`** = nombre de hits renvoyés (borné par `limit`), pas un vrai
   total corpus. Pas de pagination (hors périmètre PROJECT.md).
+
+---
+
+## Étape 4 — Thèmes et tech stack ✅ (machinerie)
+
+**Statut : machinerie terminée + validée sur échantillon. Le run complet attend les clés
+API.** Branche `etape-4-themes-tech-stack` (depuis `etape-3-recherche`).
+
+### Fait
+
+- **Taxonomies fermées, versionnées** — `pipeline/normalize/themes.yaml` (**plate, 42
+  thèmes**, ≤ 3 par projet, bornée 30–50 par un invariant du loader) et
+  `pipeline/normalize/taxonomy.yaml` (**112 technos** groupées par catégorie + table
+  d'alias pour la passe GitHub). Loader/validateur `taxonomy.py` : résolution par alias
+  insensible à la casse, filtrage sur vocabulaire, cap des thèmes, invariants au chargement
+  (pas de doublon, alias → valeur existante, fourchette des thèmes).
+- **Extraction en deux passes**, SQL écrit à la main, couche HTTP isolée (injectable → tests
+  sans réseau) :
+  - **GitHub** (`github_stack.py`) — langages API + manifestes (`package.json`,
+    `requirements.txt`, `pyproject.toml`, `go.mod`, `Cargo.toml`), parseurs purs, mappés sur
+    la taxonomie. Politesse PROJECT.md : UA identifiable, 1 req/s, un 403/rate-limit lève
+    `GitHubBlocked` et **arrête** la passe (pas de contournement). **Validé en réel** sur un
+    échantillon ethglobal (non authentifié).
+  - **LLM** (`llm_extract.py`) — OpenRouter, sortie structurée (JSON schema), taxonomies
+    injectées, sortie **re-filtrée côté client** (jamais confiance au modèle : hors-vocab
+    retiré, thèmes re-cappés à 3). Testée bout-en-bout avec client mocké.
+- **Staging + promotion explicite** — migration `0010` (`github_tech_staging`,
+  `llm_extraction_staging`). `run_extract.py` (flags `--pass`, `--source`, `--limit`,
+  `--only-missing`) écrit **uniquement** en staging ; `promote_enrichment.py` fusionne
+  (tech = GitHub sinon LLM ; thèmes = LLM ; `stack_source` posé en conséquence) et met à
+  jour `projects` — **seul chemin d'écriture** de `tech_stack`/`theme_tags`. `--dry-run`
+  pour compter d'abord. **Validé** : staging → promotion → `projects`.
+- **API** — `GET /themes` (index : les 42 thèmes + volumes/gagnants observés) et
+  `GET /themes/{slug}` (volume, gagnants, `win_rate`, **`methodology_note` de biais**,
+  stacks dominantes, projets). Slug validé contre la taxonomie (404 si inconnu ; un thème
+  valide sans projet renvoie une réponse vide propre). Taxonomie = source de vérité des
+  libellés, réutilisée côté API.
+- **Web** — pages `/themes` (index) et `/theme/[slug]` (ISR 24 h, stats + **note de biais
+  affichée** + stacks dominantes + liste projets), chips de thèmes cliquables sur la page
+  projet, lien « Thèmes » dans la nav. `pnpm typecheck` + `pnpm build` verts, rendu vérifié
+  au navigateur (avec un échantillon seedé puis retiré).
+- **Qualité** — `ruff` + `mypy --strict` clean, **+22 tests** (61 au total) : taxonomies,
+  parseurs de manifestes, client GitHub mocké (dont rate-limit), passe LLM mockée.
+
+### Décisions prises
+
+| Sujet | Décision | Raison |
+|---|---|---|
+| Source des thèmes | LLM sur taxonomie fermée **plate** (42, ≤ 3/projet) | Aucun signal de thème propre dans le corpus (`theme_tags` vide, `prize_track` = sponsors). Une taxo qui gonfle dilue les pages |
+| Périmètre du run | Machinerie + validation échantillon, **run complet reporté** | Clés API vides ; la passe LLM sur 21k projets coûte de l'argent — décision de dépense laissée à l'utilisateur |
+| Staging d'enrichissement | 2 tables (github/llm) + promotion fusionnante, pas d'écriture directe | Invariant PROJECT.md ; passes ré-exécutables indépendamment ; provenance claire |
+| `win_rate` par thème | Exposé **toujours** avec `methodology_note`, jamais seul | Contrainte PROJECT.md : ne pas présenter un chiffre biaisé comme conclusion |
+| Base de branche | `etape-3-recherche` (PR 3 non encore mergée) | `/theme` s'appuie sur l'infra existante ; PR 3 à merger avant/avec PR 4 |
+
+### En suspens / dette connue
+
+- **Run complet non exécuté** — nécessite `OPENROUTER_API_KEY` (+ `GITHUB_TOKEN` pour tenir
+  le débit sur 7,5k repos ethglobal). Après remplissage :
+  `run_extract --pass github` puis `--pass llm`, puis `promote_enrichment`. **`projects`
+  reste donc à `tech_stack`/`theme_tags` vides** (hors 2 projets de l'échantillon GitHub réel
+  laissés en base) ; les pages `/themes` sont prêtes mais affichent surtout des thèmes vides
+  tant que le run n'a pas tourné.
+- **Couverture GitHub asymétrique** — seul ethglobal a des repos (~7,5k) ; devpost/lablab
+  passent entièrement par le LLM. La passe GitHub sur ethglobal a ramené peu de manifestes
+  (repos souvent monorepos / manifeste hors racine) : le signal principal y est les langages.
+- **Biais « winners-only »** — devpost et ethglobal sont entièrement des gagnants dans le
+  corpus (seul lablab a des non-gagnants). Le `win_rate` par thème sera proche de 100 % tant
+  que le corpus reste ainsi : la note de biais est d'autant plus nécessaire. À revoir au
+  rescrape (Étape 6).
+- **Libellés de thèmes non dupliqués côté front** — les chips sur la page projet affichent le
+  slug (le libellé lisible vit dans la taxonomie / l'API). Acceptable ; à améliorer si besoin.

@@ -129,3 +129,53 @@ class HackathonDetail(BaseModel):
     projects: list[ProjectSummary]
     # Rempli quand le slug demandé existe sur plusieurs sources : les autres candidats.
     alternatives: list[HackathonAlternative]
+
+
+# Avertissement méthodologique porté par toute réponse exposant un taux de victoire par
+# thème (contrainte PROJECT.md : ne jamais présenter un chiffre biaisé comme une conclusion).
+WIN_RATE_BIAS_NOTE = (
+    "Le taux de victoire par thème est biaisé : il dépend du nombre de prix et des tracks "
+    "sponsorisées de chaque événement, pas seulement de la qualité des projets. À lire comme "
+    "un indicateur, pas comme une conclusion. Normalisation par prix prévue à l'Étape 5."
+)
+
+
+class StackCount(BaseModel):
+    """Une techno et son nombre d'occurrences dans un thème."""
+
+    name: str
+    count: int
+
+
+class ThemeSummary(BaseModel):
+    """Vue courte d'un thème pour l'index (`/themes`)."""
+
+    slug: str
+    label: str
+    description: str
+    project_count: int
+    winner_count: int
+
+
+class ThemeListResponse(BaseModel):
+    """Réponse de `/themes` : la taxonomie complète avec les volumes observés."""
+
+    themes: list[ThemeSummary]
+
+
+class ThemeDetail(BaseModel):
+    """Vue détaillée d'un thème (page `/theme/[slug]`).
+
+    `win_rate` est la part de gagnants (0–1) ou None si le thème n'a aucun projet. Toujours
+    accompagné de `methodology_note` : le chiffre est biaisé (cf. WIN_RATE_BIAS_NOTE).
+    """
+
+    slug: str
+    label: str
+    description: str
+    project_count: int
+    winner_count: int
+    win_rate: float | None
+    top_stacks: list[StackCount]
+    projects: list[ProjectSummary]
+    methodology_note: str

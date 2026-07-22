@@ -95,6 +95,35 @@ export type SearchResponse = {
   hits: SearchHit[];
 };
 
+export type StackCount = {
+  name: string;
+  count: number;
+};
+
+export type ThemeSummary = {
+  slug: string;
+  label: string;
+  description: string;
+  project_count: number;
+  winner_count: number;
+};
+
+export type ThemeListResponse = {
+  themes: ThemeSummary[];
+};
+
+export type ThemeDetail = {
+  slug: string;
+  label: string;
+  description: string;
+  project_count: number;
+  winner_count: number;
+  win_rate: number | null;
+  top_stacks: StackCount[];
+  projects: ProjectSummary[];
+  methodology_note: string;
+};
+
 export type SimilarProject = {
   id: string;
   source: string;
@@ -132,6 +161,14 @@ export function getHackathon(slug: string): Promise<HackathonDetail | null> {
 
 export async function getStats(): Promise<Stats | null> {
   return fetchJson<Stats>(`/stats`);
+}
+
+export async function getThemes(): Promise<ThemeListResponse | null> {
+  return fetchJson<ThemeListResponse>(`/themes`);
+}
+
+export function getTheme(slug: string): Promise<ThemeDetail | null> {
+  return fetchJson<ThemeDetail>(`/themes/${encodeURIComponent(slug)}`);
 }
 
 // Projets similaires : rendu côté serveur sur la page projet (donc mis en cache ISR
