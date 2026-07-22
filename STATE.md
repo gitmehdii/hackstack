@@ -56,7 +56,46 @@ reste en suspens.
 
 ---
 
-## Étape 2 — Site en lecture seule ⬜
+## Étape 2 — Site en lecture seule ✅
 
-Non commencée. Périmètre : API `/projects/{id}` + `/hackathons/{slug}`, pages projet et
-hackathon en ISR, déployable et consultable en fin d'étape. Nouvelle branche + PR.
+**Statut : terminée.** Branche `etape-2-site-lecture-seule`.
+
+### Fait
+
+- **API FastAPI** (`api/`, lecture seule, SQL à la main, pool psycopg async) — endpoints
+  `GET /projects/{id}`, `GET /hackathons/{slug}`, `GET /stats`, `GET /health`. Modèles de
+  réponse Pydantic ; `mypy --strict` étendu à `api/` (`pyproject.toml`), `ruff` clean.
+  Testé contre la DB live (21 027 projets) : projet OK, palmarès trié, 404, slug ambigu.
+- **Invariant légal appliqué à la frontière API** — l'API n'expose **jamais** la
+  description intégrale : `api/excerpt.py` fabrique `description_excerpt` (tronqué sur
+  frontière de mot, `API_EXCERPT_MAX_CHARS`=600) + flag `is_excerpt_truncated`. Ni
+  `embedding` ni `fts` ne sont sélectionnés. 6 tests unitaires sur l'extrait.
+- **Front Next.js 15** (`web/`, App Router, TS, Tailwind v4, pnpm) — pages `/`
+  (chiffres via `/stats`), `/project/[id]`, `/hackathon/[slug]`. Les deux dernières en
+  **ISR** (`revalidate=86400`, `generateStaticParams` vide → génération à la demande puis
+  cache HTML), métadonnées Open Graph par page (`generateMetadata`), `robots.ts`.
+  Le front consomme l'API (`web/lib/api.ts`), ne touche jamais la base. `pnpm typecheck`
+  + `pnpm build` verts, flux vérifié dans le navigateur.
+- **Doc** — README : sections API + site, commandes de dev, cible de déploiement
+  (front Vercel / API VPS / base Supabase), variables d'env (`web/.env.example`).
+
+### Décisions prises
+
+| Sujet | Décision | Raison |
+|---|---|---|
+| Slug hackathon non unique (2 collisions inter-sources) | `/hackathons/{slug}` choisit la source la plus fournie, expose les autres en `alternatives` ; le front affiche une note | Garder le contrat `/hackathons/{slug}` + URL ISR à un seul paramètre, sans perdre l'info |
+| Extrait de description | Tronqué à 600 car. au niveau **API** (pas seulement front) | L'invariant légal est garanti à la source, quel que soit le consommateur |
+| `/stats` | Ajouté hors périmètre strict | La home a besoin de chiffres ; endpoint trivial et déjà au contrat PROJECT.md |
+| ISR pages projet/hackathon | `generateStaticParams` retourne `[]` | 21k projets : pas de pré-rendu au build, tout à la demande puis caché (vraie ISR, pages `●` SSG) |
+| Front ↔ base | Le front passe **toujours** par l'API | Découplage PROJECT.md ; base non exposée au front |
+
+### En suspens / dette connue
+
+- **Sitemap complet** (par projet / hackathon) reporté à l'Étape 3 : nécessite un endpoint
+  de listing (arrive avec `/search`). `robots.ts` en place, autorise le crawl.
+- **`pnpm` non installé sur la machine** : deps front installées via
+  `corepack pnpm@10` (corepack ne peut pas créer le symlink `/usr/bin/pnpm`).
+- **Déploiement réel non effectué** (action externe) : le livrable est *déployable*
+  (build vert), pas encore déployé sur Vercel/VPS.
+- **Slug ambigu** : la page ne montre que la source principale ; pas de page distincte
+  pour l'alternative (URL identique). Acceptable (2 cas), documenté.

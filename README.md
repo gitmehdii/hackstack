@@ -12,7 +12,9 @@ et analyse de tendances. Voir [PROJECT.md](PROJECT.md) pour la vision complète.
       existant (~21k projets), index pgvector HNSW en place. La *génération* des
       embeddings est repoussée à l'orée de l'Étape 3 (premier consommateur = `/search`),
       pour l'exécuter sur un corpus dont l'input texte est complet — cf. note ci-dessous.
-- [ ] Étape 2 — Site en lecture seule
+- [x] **Étape 2 — Site en lecture seule** : API FastAPI (`/projects/{id}`,
+      `/hackathons/{slug}`, `/stats`) et front Next.js (pages projet + hackathon en ISR),
+      déployable et consultable. Cf. [STATE.md](STATE.md).
 - [ ] Étape 3 — Recherche hybride
 - [ ] Étape 4 — Thèmes & tech stack
 - [ ] Étape 5 — Trends
@@ -50,6 +52,37 @@ python -m pipeline.load.promote         # staging -> projects (bootstrap, sans b
 `import` puis `promote` sont idempotents (id déterministe `sha256(source:slug)`,
 upsert `ON CONFLICT`). `embed` ne traite que les lignes `embedding IS NULL`.
 
+## API + site (Étape 2)
+
+L'API (FastAPI, lecture seule) et le front (Next.js 15, App Router) sont découplés : le
+site consomme l'API, il ne touche jamais la base. L'API n'expose jamais la description
+intégrale — seulement un extrait (`description_excerpt`) avec l'URL source (contrainte
+légale, cf. PROJECT.md).
+
+```bash
+# API — nécessite la base lancée (docker compose up -d) et DATABASE_URL dans .env
+uv run uvicorn api.main:app --reload --port 8099   # http://localhost:8099/docs
+
+# Front — dans web/, deps via pnpm
+cd web
+cp .env.example .env.local        # API_URL=http://localhost:8099, SITE_URL=...
+pnpm install
+pnpm dev                          # http://localhost:3000
+```
+
+Endpoints : `GET /projects/{id}`, `GET /hackathons/{slug}` (palmarès complet ; le slug
+n'est pas unique globalement — 2 slugs du corpus existent sur 2 sources, la source la
+plus fournie est choisie et les autres exposées en `alternatives`), `GET /stats`,
+`GET /health`.
+
+Pages : `/` (chiffres), `/project/[id]`, `/hackathon/[slug]` — les deux dernières en ISR
+(`revalidate` 24 h, génération à la demande), avec métadonnées Open Graph.
+
+**Déploiement** (cible PROJECT.md) : front sur Vercel (`web/`, variables `API_URL` +
+`SITE_URL`, `API_URL` pointant vers l'API publique), API sur un VPS (`DATABASE_URL` +
+`API_CORS_ORIGINS` = domaine du front), base sur Supabase. Sitemap complet par projet
+reporté à l'Étape 3 (nécessite un endpoint de listing).
+
 ## Le corpus importé
 
 21 027 projets (après dédup) issus de trois sources :
@@ -83,9 +116,10 @@ Invariant structurant : **rien n'écrit jamais directement dans `projects`**. To
 ## Développement
 
 ```bash
-ruff check pipeline && ruff format pipeline
-mypy pipeline
+ruff check pipeline api && ruff format pipeline api
+mypy                     # strict sur pipeline/ et api/ (cf. pyproject.toml)
 pytest
+cd web && pnpm typecheck && pnpm build
 ```
 
 ## Licences
