@@ -15,3 +15,5 @@ uv.lock
 !db/migrations/*.sql
 /snapshots/
 /models/
+# Cache HTTP local des scrapers (dev, Étape 6)
+.http_cache/
