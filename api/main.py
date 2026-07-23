@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import cors_origins
 from api.db import make_pool
-from api.routers import hackathons, projects, search, stats, themes
+from api.routers import hackathons, projects, search, stats, themes, trends
 
 
 @asynccontextmanager
@@ -47,6 +47,7 @@ app.include_router(hackathons.router)
 app.include_router(search.router)
 app.include_router(stats.router)
 app.include_router(themes.router)
+app.include_router(trends.router)
 
 
 @app.get("/health", tags=["meta"])

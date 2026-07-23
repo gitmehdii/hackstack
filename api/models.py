@@ -7,6 +7,7 @@ ni le tsvector : uniquement des métadonnées et un extrait de description.
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -136,7 +137,8 @@ class HackathonDetail(BaseModel):
 WIN_RATE_BIAS_NOTE = (
     "Le taux de victoire par thème est biaisé : il dépend du nombre de prix et des tracks "
     "sponsorisées de chaque événement, pas seulement de la qualité des projets. À lire comme "
-    "un indicateur, pas comme une conclusion. Normalisation par prix prévue à l'Étape 5."
+    "un indicateur, pas comme une conclusion. La normalisation par nombre de prix, idéale, "
+    "n'est pas possible ici : le corpus ne contient pas cette information."
 )
 
 
@@ -179,3 +181,159 @@ class ThemeDetail(BaseModel):
     top_stacks: list[StackCount]
     projects: list[ProjectSummary]
     methodology_note: str
+
+
+# --- Trends (Étape 5) -------------------------------------------------------------------
+
+# Statut d'une analyse. On distingue explicitement deux formes d'indisponibilité (le front
+# ne les affiche pas pareil) :
+#   - "awaiting_date_backfill" : la donnée arrivera au backfill du rescrape (Étape 6).
+#   - "unavailable_in_corpus"  : la donnée n'est dans aucune source et le rescrape ne la
+#     récupérera peut-être jamais partout — ne rien promettre.
+AnalysisStatus = Literal["available", "awaiting_date_backfill", "unavailable_in_corpus"]
+
+# Les analyses temporelles (saturation, cycle de vie) dépendent de `hackathon_date`, NULL
+# dans tout le corpus actuel. Elles s'activeront seules quand les dates seront backfillées.
+DATE_BACKFILL_NOTE = (
+    "Cette analyse dépend de la date de l'événement (hackathon_date), absente du corpus "
+    "actuel. Elle sera renseignée par le backfill du rescrape (Étape 6) et l'analyse "
+    "s'activera automatiquement à ce moment-là."
+)
+
+# La composition d'équipe n'est présente dans aucune source importée — statut distinct du
+# simple « en attente » : rien ne garantit que le rescrape la fournisse partout.
+TEAM_SIZE_UNAVAILABLE_NOTE = (
+    "La taille des équipes (team_size) n'est présente dans aucune des sources importées, et "
+    "le rescrape ne la récupérera pas nécessairement partout. Analyse indisponible tant "
+    "qu'une source fiable ne fournit pas cette information — ce n'est pas une simple attente "
+    "de backfill."
+)
+
+# Le corpus est quasi entièrement composé de gagnants (devpost et ethglobal n'ont que des
+# gagnants ; les rares non-gagnants viennent tous de lablab). Deux pièges cumulés : (1) le
+# lift vaut ~1 par construction, et (2) un test « significatif » ne mesure pas un effet de
+# victoire mais un effet de source (les non-gagnants sont d'une seule plateforme, à la
+# composition tech différente). Le vrai contraste arrivera avec des non-gagnants variés.
+WINNER_STACKS_CAVEAT = (
+    "Le corpus est composé à ~99 % de gagnants : la stack « des gagnants » et celle « de "
+    "l'ensemble » sont presque identiques, donc le lift est proche de 1. Surtout, les rares "
+    "non-gagnants proviennent tous d'une seule source (lablab), à la composition tech "
+    "différente : une différence « statistiquement significative » reflète alors cet écart "
+    "de source, pas un effet de victoire. À lire comme une base de référence, pas comme une "
+    "conclusion — le contraste deviendra interprétable quand le rescrape (Étape 6) ajoutera "
+    "des projets non primés sur toutes les sources."
+)
+
+
+class SaturationPoint(BaseModel):
+    """Un trimestre : volume et nombre de gagnants (analyse 1)."""
+
+    quarter: str
+    count: int
+    winner_count: int
+
+
+class SaturationSeries(BaseModel):
+    """Analyse 1 — fréquence d'un thème par trimestre, superposée au taux de victoire.
+
+    `theme` None = tout le corpus. `points` est vide tant que `status` n'est pas
+    "available" (dates NULL) ; le contrat reste correct pour l'activation à l'Étape 6.
+    """
+
+    status: AnalysisStatus
+    note: str
+    theme: str | None
+    points: list[SaturationPoint]
+
+
+class LifecycleReport(BaseModel):
+    """Analyse 2 — durée de vie d'une tendance : premier trimestre, pic, dernier.
+
+    Vide (statut "awaiting_date_backfill") tant que `hackathon_date` est NULL.
+    """
+
+    status: AnalysisStatus
+    note: str
+    theme: str | None
+    first_quarter: str | None
+    peak_quarter: str | None
+    last_quarter: str | None
+
+
+class StackLift(BaseModel):
+    """Une techno : sur-représentation chez les gagnants vs l'ensemble (analyse 3).
+
+    `winner_share` = P(techno | gagnant), `baseline_share` = P(techno | tout projet).
+    `lift` = winner_share / baseline_share (≈ 1 sur le corpus actuel). `p_value` provient
+    d'un test z gagnants vs non-gagnants ; None si incalculable (trop peu de non-gagnants).
+    """
+
+    name: str
+    count: int
+    winner_count: int
+    loser_count: int
+    winner_share: float
+    baseline_share: float
+    lift: float
+    p_value: float | None
+    significant: bool | None
+
+
+class WinningStacks(BaseModel):
+    """Analyse 3 — stacks des gagnants vs l'ensemble, avec test statistique.
+
+    Toujours accompagnée de `caveat` (corpus quasi entièrement gagnant).
+    """
+
+    status: AnalysisStatus
+    note: str
+    caveat: str
+    theme: str | None
+    winners_total: int
+    losers_total: int
+    projects_total: int
+    techs: list[StackLift]
+
+
+class TeamSizeCorrelation(BaseModel):
+    """Analyse 4 — corrélation taille d'équipe / classement. Indisponible dans le corpus."""
+
+    status: AnalysisStatus
+    note: str
+
+
+class ThemeWinRate(BaseModel):
+    """Un thème : volume et taux de victoire (analyse 5)."""
+
+    slug: str
+    label: str
+    project_count: int
+    winner_count: int
+    win_rate: float | None
+
+
+class ThemeWinRates(BaseModel):
+    """Analyse 5 — thèmes à fort volume et faible taux de victoire.
+
+    `themes` est trié par volume décroissant ; l'interprétation « fort volume / faible taux »
+    est portée par l'affichage. `methodology_note` = biais du taux de victoire.
+    """
+
+    status: AnalysisStatus
+    methodology_note: str
+    themes: list[ThemeWinRate]
+
+
+class TrendsOverview(BaseModel):
+    """Charge utile du tableau de bord `/trends` : les cinq analyses, chacune avec son statut.
+
+    Les analyses dont la donnée manque portent un statut explicite et une note, jamais un
+    graphe vide sans explication (contrainte PROJECT.md : pas de chiffre biaisé présenté
+    comme une conclusion).
+    """
+
+    saturation: SaturationSeries
+    lifecycle: LifecycleReport
+    winning_stacks: WinningStacks
+    team_size: TeamSizeCorrelation
+    theme_win_rates: ThemeWinRates

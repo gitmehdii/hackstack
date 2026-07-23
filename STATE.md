@@ -253,3 +253,92 @@ reste en suspens.
   rescrape (Étape 6).
 - **Libellés de thèmes non dupliqués côté front** — les chips sur la page projet affichent le
   slug (le libellé lisible vit dans la taxonomie / l'API). Acceptable ; à améliorer si besoin.
+
+---
+
+## Étape 5 — Trends ✅
+
+**Statut : terminée** (plomberie complète + états vides distincts). Branche
+`etape-5-trends` (depuis `main`).
+
+### Contexte de départ (décision utilisateur)
+
+Les 5 analyses de `/trends` sont demandées, mais l'état du corpus en bloque une partie —
+donnée vérifiée en base avant de coder :
+
+| # | Analyse | Donnée requise | État | Verdict |
+|---|---------|----------------|------|---------|
+| 1 | Thème par trimestre × win rate | `hackathon_date` | **0/21027** | en attente backfill (Ét. 6) |
+| 2 | Cycle de vie d'une tendance | `hackathon_date` | **0/21027** | en attente backfill (Ét. 6) |
+| 3 | Stacks gagnants vs ensemble + test | `tech_stack`, `is_winner` | tech 11 %, winners **99,3 %** | calculée + caveat fort |
+| 4 | Corrélation équipe / classement | `team_size` | **0/21027** | indisponible dans le corpus |
+| 5 | Thèmes volume / faible win rate | `theme_tags`, `is_winner` | thèmes 86 % | calculée + note de biais |
+
+Choix validé : **construire toute l'infra `/trends`** (endpoints + dashboard + graphes +
+notes), calculer les vrais chiffres là où la donnée existe, et afficher des états vides
+**explicites** ailleurs. Distinction demandée et implémentée : un statut
+`awaiting_date_backfill` (les dates arriveront à l'Étape 6) ≠ un statut
+`unavailable_in_corpus` (team_size : aucune source ne la fournit, le rescrape ne la
+récupérera peut-être jamais — ne rien promettre). Pas de backfill d'année depuis les noms
+de hackathons : seulement 34 % en contiennent, année seule (pas trimestre) — trop partiel
+pour ne pas frôler l'interdit « chiffre biaisé présenté comme conclusion » (PROJECT.md).
+
+### Fait
+
+- **Test statistique en Python pur** (`api/stats_test.py`) — test z de comparaison de deux
+  proportions (variance poolée, bilatéral, p-value via `math.erf`). Aucune dépendance lourde
+  (numpy/scipy exclus de l'API). Se déclare **incalculable** (tout à None) sur les cas
+  dégénérés (effectif nul, variance nulle) plutôt que d'inventer un signal. 7 tests unitaires.
+- **Requêtes agrégées** (`api/queries/trends.py`, SQL à la main, pool `dict_row`) :
+  `date_coverage` (décide l'activation des analyses temporelles), `theme_saturation`
+  (volume/gagnants par trimestre, correcte dès que les dates existeront), `theme_win_rates`
+  (analyse 5), `stack_winner_vs_rest` (analyse 3 : comptes gagnants/non-gagnants/ensemble +
+  totaux pour le test z ; filtre `theme` et `winners_only`).
+- **Routeur `/trends`** (`api/routers/trends.py`) — trois endpoints du contrat PROJECT.md :
+  - `GET /trends` — tableau de bord : les 5 analyses bundlées, chacune avec `status` + note
+    (comme `/themes/{slug}` bundle sa page).
+  - `GET /trends/saturation?theme=` — analyse 1 (statut `awaiting_date_backfill`, points `[]`).
+  - `GET /trends/stacks?theme=&winners_only=` — analyse 3, lift + test z par techno.
+  - Slug de thème validé contre la taxonomie (**404** si inconnu). Statut team_size figé à
+    `unavailable_in_corpus`.
+- **Note méthodologique honnête** — la « normalisation par nombre de prix » de PROJECT.md
+  **n'est pas faisable** (aucune donnée de prix dans le corpus : `prize_track` seulement pour
+  ethglobal, pas de table prix). `WIN_RATE_BIAS_NOTE` mise à jour en conséquence. Le caveat
+  des stacks (`WINNER_STACKS_CAVEAT`) nomme le **piège de confondant de source** : les rares
+  non-gagnants venant tous de lablab, une différence « significative » au test reflète la
+  source, pas un effet de victoire.
+- **Front** — page **`/trends`** (Server Component, ISR 24 h), graphes en **SVG/CSS pur**
+  (aucune lib de charting). Pastilles de statut à 3 états, cartes d'état vide au ton distinct
+  (attente ambre vs absence neutre), barres de fréquence (analyse 3) avec lift + marqueur `✻`
+  de significativité renvoyant au caveat, barres de volume + « fort volume / faible win rate »
+  (analyse 5), note méthodo globale en tête. Lien **« Tendances »** ajouté à la nav.
+- **Qualité** — `ruff` + `mypy --strict` clean, `tsc --noEmit` clean, **49 tests** verts.
+  Vérifié : logique des builders en direct sur la DB (21 027 projets), endpoints de contrat
+  en HTTP (saturation en attente, 404 thème, `winners_only` true/false), et rendu `/trends`
+  dans le navigateur (5 cartes, statuts, caveats, `✻`).
+
+### Décisions prises
+
+| Sujet | Décision | Raison |
+|---|---|---|
+| Analyses 1 & 2 (dates) | Requêtes écrites et correctes, statut `awaiting_date_backfill`, séries vides | S'activeront seules au backfill Ét. 6 ; même patron que `since`/`until` de l'Ét. 3 |
+| Analyse 4 (team_size) | Statut distinct `unavailable_in_corpus`, pas de calcul construit | Donnée absente de toutes les sources ; le rescrape ne la garantit pas — ne rien promettre |
+| Analyse 3 (stacks) | Calculée + livrée avec caveat de **confondant de source** | Corpus ~99 % gagnants → lift ≈ 1 ; « significativité » = artefact de source (lablab), pas de victoire |
+| Normalisation par prix | **Abandonnée**, note méthodo honnête | Aucune donnée de nombre de prix dans le corpus ; la promettre serait mentir |
+| Test statistique | z deux proportions en **Python pur** (`math.erf`) | API légère, pas de scipy ; dégénérescence explicite plutôt qu'un faux signal |
+| `/trends` bundle | Un endpoint agrège les 5 analyses + statuts | La page fait un seul appel ; patron cohérent avec `/themes/{slug}` |
+
+### En suspens / dette connue
+
+- **3 des 5 analyses en attente de données** — saturation, cycle de vie et corrélation
+  équipe restent vides tant que l'Étape 6 n'a pas backfillé `hackathon_date` (et,
+  éventuellement, `team_size`). La plomberie et les requêtes sont prêtes : saturation et
+  cycle de vie s'allumeront automatiquement dès que des dates seront présentes.
+- **Analyse 4 peut-être jamais** — si aucune source ne fournit la taille d'équipe au
+  rescrape, la corrélation équipe/classement restera `unavailable_in_corpus`. À rebâtir (test
+  de corrélation + graphe) seulement quand la donnée existera.
+- **Analyses 3 & 5 biaisées par le corpus winners-only** — chiffres justes mais peu
+  informatifs tant que le corpus est ~99 % gagnants. Le vrai contraste (gagnants vs
+  non-gagnants variés) arrivera au rescrape. Notes de biais en place partout.
+- **Backfill embeddings toujours incomplet** (hérité Ét. 3) — sans impact sur les Trends
+  (agrégats SQL, pas de vecteur).

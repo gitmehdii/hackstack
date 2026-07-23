@@ -36,6 +36,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Thèmes
               </Link>
               <Link
+                href="/trends"
+                className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+              >
+                Tendances
+              </Link>
+              <Link
                 href="/search"
                 className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
               >
