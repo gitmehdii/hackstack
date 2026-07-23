@@ -20,7 +20,7 @@ import httpx
 
 from pipeline.normalize.taxonomy import Taxonomy, load_taxonomy
 
-DEFAULT_MODEL = "google/gemini-2.0-flash-001"
+DEFAULT_MODEL = "google/gemini-2.5-flash-lite"
 _MAX_INPUT_CHARS = 4000  # descriptions tronquées : le signal utile est en tête
 
 _RESPONSE_SCHEMA = {
@@ -121,6 +121,11 @@ class LLMExtractor:
         }
         resp = self._client.post("/chat/completions", json=body)
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
-        tech, themes = parse_response(content, self._tax)
+        # Certains modèles renvoient parfois `content` null (ou une forme inattendue) :
+        # on retombe alors sur des listes vides plutôt que de casser le run.
+        try:
+            content = resp.json()["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            content = None
+        tech, themes = parse_response(content or "", self._tax)
         return LLMResult(tech_stack=tech, theme_tags=themes, model=self._model)

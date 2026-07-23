@@ -105,7 +105,11 @@ def run_github(
 
 
 def run_llm(
-    conn: psycopg.Connection, sources: Sequence[str], limit: int | None, only_missing: bool
+    conn: psycopg.Connection,
+    sources: Sequence[str],
+    limit: int | None,
+    only_missing: bool,
+    workers: int = 8,
 ) -> None:
     if not (os.environ.get("OPENROUTER_API_KEY") or "").strip():
         raise SystemExit("OPENROUTER_API_KEY vide — passe LLM impossible (voir .env.example).")
@@ -120,27 +124,41 @@ def run_llm(
             sources=sources,
             limit=limit,
         )
-    print(f"[llm] {len(rows)} projets à traiter.")
+    print(f"[llm] {len(rows)} projets à traiter ({workers} workers).")
     if not rows:
         return
 
+    # Appels réseau en parallèle (httpx.Client est thread-safe), écritures DB sérialisées
+    # par lot pour rester dans une seule connexion psycopg. Lot commité => reprise propre
+    # via --only-missing si le run est interrompu.
+    from concurrent.futures import ThreadPoolExecutor
+
     extractor = LLMExtractor()
+
+    def _one(row: tuple[object, ...]) -> tuple[object, object, list[str], list[str], str]:
+        pid, source, title, short, description = row
+        res = extractor.extract(str(title), short, description)  # type: ignore[arg-type]
+        return pid, source, res.tech_stack, res.theme_tags, res.model
+
     done = 0
-    for pid, source, title, short, description in rows:
-        result = extractor.extract(str(title), short, description)  # type: ignore[arg-type]
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO llm_extraction_staging "
-                "(project_id, source, tech_stack, theme_tags, model) "
-                "VALUES (%s, %s, %s, %s, %s) "
-                "ON CONFLICT (project_id) DO UPDATE SET "
-                "  tech_stack = EXCLUDED.tech_stack, theme_tags = EXCLUDED.theme_tags, "
-                "  model = EXCLUDED.model, extracted_at = now()",
-                (pid, source, result.tech_stack, result.theme_tags, result.model),
-            )
-        conn.commit()
-        done += 1
-        print(f"  [llm] {done}/{len(rows)}", end="\r", flush=True)
+    chunk = max(workers * 8, 32)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for start in range(0, len(rows), chunk):
+            batch = rows[start : start + chunk]
+            results = list(pool.map(_one, batch))
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO llm_extraction_staging "
+                    "(project_id, source, tech_stack, theme_tags, model) "
+                    "VALUES (%s, %s, %s, %s, %s) "
+                    "ON CONFLICT (project_id) DO UPDATE SET "
+                    "  tech_stack = EXCLUDED.tech_stack, theme_tags = EXCLUDED.theme_tags, "
+                    "  model = EXCLUDED.model, extracted_at = now()",
+                    results,
+                )
+            conn.commit()
+            done += len(batch)
+            print(f"  [llm] {done}/{len(rows)}", end="\r", flush=True)
     print(f"\n[llm] {done} projets écrits en staging.")
 
 
@@ -150,13 +168,14 @@ def main() -> None:
     ap.add_argument("--source", action="append", default=[], dest="sources")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--only-missing", action="store_true")
+    ap.add_argument("--workers", type=int, default=8, help="parallélisme de la passe LLM")
     args = ap.parse_args()
 
     with connect() as conn:
         if args.passes in ("github", "both"):
             run_github(conn, args.sources, args.limit, args.only_missing)
         if args.passes in ("llm", "both"):
-            run_llm(conn, args.sources, args.limit, args.only_missing)
+            run_llm(conn, args.sources, args.limit, args.only_missing, args.workers)
 
 
 if __name__ == "__main__":
