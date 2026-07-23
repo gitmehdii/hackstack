@@ -124,6 +124,88 @@ export type ThemeDetail = {
   methodology_note: string;
 };
 
+// --- Trends (Étape 5) ------------------------------------------------------------------
+
+// Statut d'une analyse. "awaiting_date_backfill" et "unavailable_in_corpus" sont affichés
+// différemment : le premier est une attente (Étape 6), le second une donnée peut-être jamais
+// disponible.
+export type AnalysisStatus =
+  | "available"
+  | "awaiting_date_backfill"
+  | "unavailable_in_corpus";
+
+export type SaturationPoint = {
+  quarter: string;
+  count: number;
+  winner_count: number;
+};
+
+export type SaturationSeries = {
+  status: AnalysisStatus;
+  note: string;
+  theme: string | null;
+  points: SaturationPoint[];
+};
+
+export type LifecycleReport = {
+  status: AnalysisStatus;
+  note: string;
+  theme: string | null;
+  first_quarter: string | null;
+  peak_quarter: string | null;
+  last_quarter: string | null;
+};
+
+export type StackLift = {
+  name: string;
+  count: number;
+  winner_count: number;
+  loser_count: number;
+  winner_share: number;
+  baseline_share: number;
+  lift: number;
+  p_value: number | null;
+  significant: boolean | null;
+};
+
+export type WinningStacks = {
+  status: AnalysisStatus;
+  note: string;
+  caveat: string;
+  theme: string | null;
+  winners_total: number;
+  losers_total: number;
+  projects_total: number;
+  techs: StackLift[];
+};
+
+export type TeamSizeCorrelation = {
+  status: AnalysisStatus;
+  note: string;
+};
+
+export type ThemeWinRate = {
+  slug: string;
+  label: string;
+  project_count: number;
+  winner_count: number;
+  win_rate: number | null;
+};
+
+export type ThemeWinRates = {
+  status: AnalysisStatus;
+  methodology_note: string;
+  themes: ThemeWinRate[];
+};
+
+export type TrendsOverview = {
+  saturation: SaturationSeries;
+  lifecycle: LifecycleReport;
+  winning_stacks: WinningStacks;
+  team_size: TeamSizeCorrelation;
+  theme_win_rates: ThemeWinRates;
+};
+
 export type SimilarProject = {
   id: string;
   source: string;
@@ -169,6 +251,10 @@ export async function getThemes(): Promise<ThemeListResponse | null> {
 
 export function getTheme(slug: string): Promise<ThemeDetail | null> {
   return fetchJson<ThemeDetail>(`/themes/${encodeURIComponent(slug)}`);
+}
+
+export function getTrends(): Promise<TrendsOverview | null> {
+  return fetchJson<TrendsOverview>(`/trends`);
 }
 
 // Projets similaires : rendu côté serveur sur la page projet (donc mis en cache ISR
