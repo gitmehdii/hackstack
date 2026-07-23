@@ -232,31 +232,49 @@ Si un scraper rencontre un blocage anti-bot (Cloudflare challenge, captcha, 403 
 - Les cinq analyses, avec les graphes
 - Note méthodologique
 
-### Étape 6 — Pipeline de rescrape
+### Étape 6 — Scraping (acquisition)
 
-- Les trois scrapers, avec cache HTTP local pour le développement
-- Staging + validation + promotion
-- Tests de contrat
+Le cœur data engineering, entièrement à écrire (aucune collecte n'existe : le corpus vient
+d'un import unique de SQLite). Alimente `projects_staging` en manuel.
+
+- Classe de base `pipeline/scrapers/base.py` : retry, rate limit (1 req/s max par domaine),
+  cache HTTP local pour le développement
+- Les trois scrapers : `lablab.py`, `devpost.py`, `ethglobal.py`
+- Politesse : respect de `robots.txt`, User-Agent identifiable pointant vers le repo, arrêt
+  et ouverture d'issue sur blocage anti-bot (Cloudflare/captcha/403) — jamais de contournement
+- Tests de contrat sur fixtures HTML figées (`pipeline/contracts/`) — démarre aussi le
+  compteur « un mois » exigé avant l'agent mainteneur
+
+À la fin de cette étape, un scrape produit de la donnée fraîche dans `staging` ; elle n'y
+monte dans `projects` qu'une fois la barrière de validation posée (Étape 7).
+
+### Étape 7 — Validation & automatisation
+
+Rend le scrape récurrent et sûr.
+
+- Validation avant promotion : comparaison du batch au dernier run sain par source, seuils
+  dans `pipeline/contracts/thresholds.yaml`, rapport de diff, issue GitHub auto en cas
+  d'échec ; `projects` reste inchangée si un seuil est dépassé
 - Workflow GitHub Actions hebdomadaire
 
-### Étape 7 — Dataset public
+### Étape 8 — Dataset public
 
 - Export vers HuggingFace Datasets
 - Releases trimestrielles versionnées
 
-### Étape 8 — Agent mainteneur
+### Étape 9 — Agent mainteneur
 
-Voir la section dédiée plus bas. **Ne pas commencer cette étape avant que les étapes 1 à 7 soient stables et que les tests de contrat aient tourné pendant au moins un mois.**
+Voir la section dédiée plus bas. **Ne pas commencer cette étape avant que les étapes 1 à 8 soient stables et que les tests de contrat aient tourné pendant au moins un mois.**
 
 ---
 
-## Agent mainteneur (étape 8, plus tard)
+## Agent mainteneur (étape 9, plus tard)
 
 L'idée : un agent qui diagnostique et propose des corrections quand un scraper casse.
 
 Trois niveaux, à implémenter dans l'ordre, jamais en sautant une marche :
 
-**Niveau 1 — détection.** Aucun LLM. Les tests de contrat de l'étape 6 tournent chaque semaine sur un échantillon de 20 pages figées par source, et vérifient les invariants. Issue automatique en cas d'échec. Ce niveau attrape la grande majorité des casses et doit être fiable avant d'aller plus loin.
+**Niveau 1 — détection.** Aucun LLM. Les tests de contrat (écrits à l'étape 6, planifiés en hebdomadaire à l'étape 7) tournent chaque semaine sur un échantillon de 20 pages figées par source, et vérifient les invariants. Issue automatique en cas d'échec. Ce niveau attrape la grande majorité des casses et doit être fiable avant d'aller plus loin.
 
 **Niveau 2 — diagnostic.** Quand le niveau 1 échoue, un agent reçoit : le HTML de référence, le HTML actuel, le code du scraper, le rapport d'échec. Il écrit une analyse dans l'issue. Il ne modifie aucun fichier. Périmètre en lecture seule, strictement.
 
@@ -293,7 +311,7 @@ Instrumenter : nombre de casses détectées, diagnostics corrects, PR mergées s
 - Ajouter Playwright par défaut, seulement là où le HTTP simple échoue
 - Republier le texte intégral des descriptions
 - Présenter des taux de victoire sans mention du biais de tracks
-- Commencer l'étape 8 avant que le reste soit stable
+- Commencer l'étape 9 (agent mainteneur) avant que le reste soit stable
 
 ---
 
