@@ -128,4 +128,8 @@ class LLMExtractor:
         except (KeyError, IndexError, TypeError):
             content = None
         tech, themes = parse_response(content or "", self._tax)
+        # Ancrage : on ne garde que la tech réellement nommée dans le texte du projet
+        # (anti-hallucination / anti-dump). Les thèmes restent inférés, non ancrables.
+        text = " ".join(p for p in (title, short, description) if p)
+        tech = self._tax.ground_tech(tech, text)
         return LLMResult(tech_stack=tech, theme_tags=themes, model=self._model)

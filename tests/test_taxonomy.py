@@ -47,3 +47,28 @@ def test_clean_themes_caps_at_three() -> None:
 def test_clean_themes_dedups() -> None:
     tax = load_taxonomy()
     assert tax.clean_themes(["defi", "DeFi", "defi"]) == ["defi"]
+
+
+def test_ground_tech_keeps_only_mentioned() -> None:
+    tax = load_taxonomy()
+    # Rien nommé -> tout retiré (anti-hallucination).
+    assert tax.ground_tech(["GPT-4", "Python", "Docker"], "Report a bug, get fixes.") == []
+    # Nommé (dont via alias) -> gardé.
+    assert tax.ground_tech(["Gemini", "GPT-4"], "built with Gemini 2.5 Flash") == ["Gemini"]
+    assert tax.ground_tech(["GPT-4", "React"], "uses the openai api and react") == [
+        "GPT-4",
+        "React",
+    ]
+
+
+def test_ground_tech_kills_full_dump() -> None:
+    tax = load_taxonomy()
+    # Le modèle recrache toute la taxonomie : seul ce qui est dans le texte survit.
+    grounded = tax.ground_tech(list(tax.tech_canonical), "coordinates agents on live Kubernetes")
+    assert grounded == ["Kubernetes"]
+
+
+def test_ground_tech_no_false_positive_on_substrings() -> None:
+    tax = load_taxonomy()
+    # « google » ne doit pas ancrer « Go » ; « database » ne doit pas ancrer « Base ».
+    assert tax.ground_tech(["Go", "Base"], "we use google cloud and a database") == []

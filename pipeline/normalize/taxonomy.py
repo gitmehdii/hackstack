@@ -11,11 +11,20 @@ Les taxonomies sont des données versionnées (`*.yaml`), jamais du code en dur.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
 import yaml
+
+
+@lru_cache(maxsize=1024)
+def _mention_pattern(form: str) -> re.Pattern[str]:
+    # Frontières = « pas alphanumérique », pour matcher « Go », « C++ », « next.js »
+    # sans faux positif dans « google » ou « database ».
+    return re.compile(r"(?<![a-z0-9])" + re.escape(form) + r"(?![a-z0-9])")
+
 
 _DIR = Path(__file__).resolve().parent
 TAXONOMY_PATH = _DIR / "taxonomy.yaml"
@@ -40,6 +49,8 @@ class Taxonomy:
     max_themes_per_project: int
     _tech_lower: dict[str, str] = field(default_factory=dict)  # canonique minuscule -> canonique
     _theme_slugs: frozenset[str] = field(default_factory=frozenset)
+    # canonique -> formes de surface (canonique + alias) à chercher dans le texte
+    _surface_forms: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def theme_slugs(self) -> frozenset[str]:
         return self._theme_slugs
@@ -73,6 +84,22 @@ class Taxonomy:
                 seen.add(canon)
                 out.append(canon)
         return out
+
+    def ground_tech(self, tech: list[str], text: str) -> list[str]:
+        """Ne garde que les technos réellement mentionnées dans `text`.
+
+        Défense contre l'hallucination LLM (stack devinée quand rien n'est nommé) et contre
+        les recrachages complets de la taxonomie : une valeur canonique n'est conservée que
+        si elle-même ou l'un de ses alias apparaît dans le texte (frontière de mot, insensible
+        à la casse). Les valeurs sont supposées déjà canoniques (sortie de clean_tech).
+        """
+        low = text.lower()
+        kept: list[str] = []
+        for t in tech:
+            forms = self._surface_forms.get(t, (t.lower(),))
+            if any(_mention_pattern(f).search(low) for f in forms):
+                kept.append(t)
+        return kept
 
     def clean_themes(self, slugs: list[str]) -> list[str]:
         """Filtre sur les slugs connus, dédoublonne, cappe à max_themes_per_project."""
@@ -111,6 +138,13 @@ def _load_raw() -> Taxonomy:
     if bad:
         raise ValueError(f"taxonomy.yaml : alias vers valeur inconnue : {bad}")
 
+    # Formes de surface par techno (pour l'ancrage dans le texte) : la valeur canonique
+    # elle-même + tous les alias qui pointent vers elle, en minuscules.
+    surface: dict[str, list[str]] = {v: [v.lower()] for v in canonical}
+    for alias_key, target in aliases.items():
+        surface[target].append(alias_key)
+    surface_forms = {k: tuple(dict.fromkeys(v)) for k, v in surface.items()}
+
     themes = tuple(
         Theme(slug=str(t["slug"]), label=str(t["label"]), description=str(t["description"]))
         for t in thm["themes"]
@@ -133,6 +167,7 @@ def _load_raw() -> Taxonomy:
         max_themes_per_project=int(thm["max_per_project"]),
         _tech_lower=tech_lower,
         _theme_slugs=frozenset(slugs),
+        _surface_forms=surface_forms,
     )
 
 
