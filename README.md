@@ -159,9 +159,10 @@ Limites connues, héritées du corpus (à combler au rescrape, Étape 6) :
 - **`hackathon_date` est NULL partout** — aucune date dans les dumps. Bloque les Trends
   (Étape 5) tant que le backfill n'est pas fait.
 - **`team_size` NULL** — le corpus ne contient pas la composition des équipes.
-- **`tech_stack` / `theme_tags` vides tant que l'extraction (Étape 4) n'a pas tourné** — la
-  machinerie existe (voir plus haut) ; le run complet attend les clés API. Les tags bruts
-  lablab sont préservés dans `raw_project_tech`, pas exposés.
+- **`theme_tags` peuplés (86 % des projets), `tech_stack` volontairement épars (11 %)** —
+  extraction LLM (Étape 4) faite ; la tech est **ancrée** (seulement ce qui est nommé dans le
+  texte), donc rare sur les descriptions courtes de devpost. Les tags bruts lablab restent
+  dans `raw_project_tech`, pas exposés.
 - **devpost n'a que `short_description`** — les embeddings et le FTS utilisent le texte
   disponible.
 

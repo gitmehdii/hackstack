@@ -169,10 +169,26 @@ reste en suspens.
 
 ---
 
-## Étape 4 — Thèmes et tech stack ✅ (machinerie)
+## Étape 4 — Thèmes et tech stack ✅
 
-**Statut : machinerie terminée + validée sur échantillon. Le run complet attend les clés
-API.** Branche `etape-4-themes-tech-stack` (depuis `etape-3-recherche`).
+**Statut : terminée. Run LLM complet exécuté sur les 21 027 projets.** Branche
+`etape-4-themes-tech-stack` (depuis `etape-3-recherche`).
+
+### Run complet (fait)
+
+- **Passe LLM sur tout le corpus** — modèle **`google/gemini-2.5-flash-lite`** (OpenRouter,
+  ~4-5 €, ~40 min à 12 workers). Comparé en réel à qwen3.5-flash et deepseek-v4-flash :
+  gemini est le seul à sortir la tech de façon fiable et sans planter. **21 027/21 027**
+  traités, **86 % avec ≥ 1 thème**, 42/42 thèmes utilisés (répartition saine, pas
+  d'effondrement : generative-ai 5705, defi 4532, productivity 3108…).
+- **Fiabilité mesurée, pas supposée** — spot-check de 20 projets : thèmes corrects à ~85 %,
+  mais **tech_stack LLM peu fiable** (hallucination quand rien n'est nommé ; ~1,3 % de
+  recrachages complets de la taxonomie qui passaient le filtre car toutes valeurs valides).
+- **Parade : ancrage** (`Taxonomy.ground_tech` + `reground.py`) — on ne garde qu'une techno
+  **réellement écrite** dans le texte (formes de surface = canonique + alias, frontières
+  non-alphanumériques). A retiré **42 353** technos hallucinées ; tech tombe à **2 386
+  projets (11 %)** mais chacun est justifié. Top ancré : Ethereum, Gemini, IPFS, ENS,
+  Polygon, React, Python, Next.js. L'ancrage est aussi appliqué en ligne pour les runs futurs.
 
 ### Fait
 
@@ -222,15 +238,15 @@ API.** Branche `etape-4-themes-tech-stack` (depuis `etape-3-recherche`).
 
 ### En suspens / dette connue
 
-- **Run complet non exécuté** — nécessite `OPENROUTER_API_KEY` (+ `GITHUB_TOKEN` pour tenir
-  le débit sur 7,5k repos ethglobal). Après remplissage :
-  `run_extract --pass github` puis `--pass llm`, puis `promote_enrichment`. **`projects`
-  reste donc à `tech_stack`/`theme_tags` vides** (hors 2 projets de l'échantillon GitHub réel
-  laissés en base) ; les pages `/themes` sont prêtes mais affichent surtout des thèmes vides
-  tant que le run n'a pas tourné.
-- **Couverture GitHub asymétrique** — seul ethglobal a des repos (~7,5k) ; devpost/lablab
-  passent entièrement par le LLM. La passe GitHub sur ethglobal a ramené peu de manifestes
-  (repos souvent monorepos / manifeste hors racine) : le signal principal y est les langages.
+- **Passe GitHub à l'échelle non exécutée** — faute de `GITHUB_TOKEN` (60 req/h en anonyme,
+  insuffisant pour 7,5k repos ethglobal) ; seul un échantillon de 2 projets est en `github`.
+  La tech ethglobal vient donc du LLM ancré, pas des repos. À lancer quand un token sera
+  dispo : `run_extract --pass github --only-missing` puis `promote_enrichment` (la fusion
+  fait déjà primer github sur llm).
+- **Couverture tech volontairement basse (11 %)** — conséquence directe de l'ancrage : la
+  plupart des descriptions (surtout devpost, court seulement) ne nomment pas leur stack, donc
+  on ne la prétend pas. Choix assumé : précision > rappel. Remontera au rescrape (Étape 6,
+  descriptions complètes) et avec la passe GitHub.
 - **Biais « winners-only »** — devpost et ethglobal sont entièrement des gagnants dans le
   corpus (seul lablab a des non-gagnants). Le `win_rate` par thème sera proche de 100 % tant
   que le corpus reste ainsi : la note de biais est d'autant plus nécessaire. À revoir au
