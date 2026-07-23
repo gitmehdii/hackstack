@@ -4,6 +4,15 @@ Journal d'avancement du projet. Une section par étape (cf. [PROJECT.md](PROJECT
 Mis à jour à la fin de chaque étape : ce qui a été fait, les décisions prises, ce qui
 reste en suspens.
 
+> **Révision du plan (2026-07-23, après l'Étape 5).** L'ancienne « Étape 6 — Pipeline de
+> rescrape » empilait trop (scrapers + validation + contrats + CI) pour une seule PR. Elle
+> est scindée, et l'agent mainteneur décalé d'un cran :
+> **6 = Scraping (acquisition)** · **7 = Validation & automatisation** · **8 = Dataset
+> public** (ex-7) · **9 = Agent mainteneur** (ex-8). Aucune étape 1→5 n'est affectée. Les
+> tests de contrat vivent désormais en Étape 6 (ils démarrent le compteur « un mois » du
+> mainteneur). Rappel du contexte : aucune collecte n'existe encore — le corpus vient d'un
+> import unique de SQLite, l'Étape 6 est donc à écrire de zéro.
+
 ---
 
 ## Étape 1 — Fondations ✅
