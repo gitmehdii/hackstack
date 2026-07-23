@@ -108,6 +108,42 @@ privée. Section « projets similaires » sur chaque page projet.
 `API_CORS_ORIGINS` = domaine du front), base sur Supabase. Sitemap complet par projet
 reporté à l'Étape 3 (nécessite un endpoint de listing).
 
+## Thèmes et tech stack (Étape 4)
+
+Deux **taxonomies fermées, versionnées** : les thèmes
+([`themes.yaml`](pipeline/normalize/themes.yaml), plate, 42 entrées, ≤ 3 par projet) et le
+tech stack ([`taxonomy.yaml`](pipeline/normalize/taxonomy.yaml), 112 technos + alias).
+L'extraction se fait en **deux passes**, écrites en staging puis promues explicitement
+(rien n'écrit direct dans `projects`) :
+
+1. **GitHub** (fiable) — langages + manifestes (`package.json`, `requirements.txt`,
+   `pyproject.toml`, `go.mod`, `Cargo.toml`) mappés sur la taxonomie. `stack_source='github'`.
+2. **LLM** (OpenRouter, sortie structurée) — `tech_stack` **et** `theme_tags`, restreints aux
+   taxonomies, thèmes cappés à 3. `stack_source='llm'`.
+
+```bash
+# Passe GitHub (token conseillé ; sans token : 60 req/h, échantillon seulement)
+python -m pipeline.normalize.run_extract --pass github --limit 20
+
+# Passe LLM (nécessite OPENROUTER_API_KEY) — tech + thèmes
+python -m pipeline.normalize.run_extract --pass llm --source devpost --limit 20
+
+# Fusion des deux passes -> projects (dry-run pour compter d'abord)
+python -m pipeline.load.promote_enrichment --dry-run
+python -m pipeline.load.promote_enrichment
+```
+
+`run_extract` est idempotent (`--only-missing` saute ce qui est déjà en staging). La fusion :
+`tech_stack` = GitHub si présent sinon LLM ; `theme_tags` = LLM.
+
+Endpoints : `GET /themes` (index, volumes observés), `GET /themes/{slug}` (volume, taux de
+victoire **+ note de biais**, stacks dominantes, projets). Pages : `/themes` et
+`/theme/[slug]` (ISR 24 h), chips de thèmes cliquables sur chaque page projet.
+
+> **Taux de victoire biaisé.** Il dépend du nombre de prix et des tracks sponsorisées, pas
+> seulement de la qualité (cf. PROJECT.md). Le chiffre est toujours affiché avec sa note
+> méthodologique ; la normalisation par prix arrive à l'Étape 5.
+
 ## Le corpus importé
 
 21 027 projets (après dédup) issus de trois sources :
@@ -123,8 +159,10 @@ Limites connues, héritées du corpus (à combler au rescrape, Étape 6) :
 - **`hackathon_date` est NULL partout** — aucune date dans les dumps. Bloque les Trends
   (Étape 5) tant que le backfill n'est pas fait.
 - **`team_size` NULL** — le corpus ne contient pas la composition des équipes.
-- **`tech_stack` vide** — l'extraction propre (taxonomie fermée) est l'Étape 4. Les tags
-  bruts lablab existants sont préservés dans `raw_project_tech`, pas exposés.
+- **`theme_tags` peuplés (86 % des projets), `tech_stack` volontairement épars (11 %)** —
+  extraction LLM (Étape 4) faite ; la tech est **ancrée** (seulement ce qui est nommé dans le
+  texte), donc rare sur les descriptions courtes de devpost. Les tags bruts lablab restent
+  dans `raw_project_tech`, pas exposés.
 - **devpost n'a que `short_description`** — les embeddings et le FTS utilisent le texte
   disponible.
 

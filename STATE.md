@@ -166,3 +166,90 @@ reste en suspens.
   `/search` n'en fournit pas. À traiter quand le SEO deviendra prioritaire.
 - **`total` de `/search`** = nombre de hits renvoyés (borné par `limit`), pas un vrai
   total corpus. Pas de pagination (hors périmètre PROJECT.md).
+
+---
+
+## Étape 4 — Thèmes et tech stack ✅
+
+**Statut : terminée. Run LLM complet exécuté sur les 21 027 projets.** Branche
+`etape-4-themes-tech-stack` (depuis `etape-3-recherche`).
+
+### Run complet (fait)
+
+- **Passe LLM sur tout le corpus** — modèle **`google/gemini-2.5-flash-lite`** (OpenRouter,
+  ~4-5 €, ~40 min à 12 workers). Comparé en réel à qwen3.5-flash et deepseek-v4-flash :
+  gemini est le seul à sortir la tech de façon fiable et sans planter. **21 027/21 027**
+  traités, **86 % avec ≥ 1 thème**, 42/42 thèmes utilisés (répartition saine, pas
+  d'effondrement : generative-ai 5705, defi 4532, productivity 3108…).
+- **Fiabilité mesurée, pas supposée** — spot-check de 20 projets : thèmes corrects à ~85 %,
+  mais **tech_stack LLM peu fiable** (hallucination quand rien n'est nommé ; ~1,3 % de
+  recrachages complets de la taxonomie qui passaient le filtre car toutes valeurs valides).
+- **Parade : ancrage** (`Taxonomy.ground_tech` + `reground.py`) — on ne garde qu'une techno
+  **réellement écrite** dans le texte (formes de surface = canonique + alias, frontières
+  non-alphanumériques). A retiré **42 353** technos hallucinées ; tech tombe à **2 386
+  projets (11 %)** mais chacun est justifié. Top ancré : Ethereum, Gemini, IPFS, ENS,
+  Polygon, React, Python, Next.js. L'ancrage est aussi appliqué en ligne pour les runs futurs.
+
+### Fait
+
+- **Taxonomies fermées, versionnées** — `pipeline/normalize/themes.yaml` (**plate, 42
+  thèmes**, ≤ 3 par projet, bornée 30–50 par un invariant du loader) et
+  `pipeline/normalize/taxonomy.yaml` (**112 technos** groupées par catégorie + table
+  d'alias pour la passe GitHub). Loader/validateur `taxonomy.py` : résolution par alias
+  insensible à la casse, filtrage sur vocabulaire, cap des thèmes, invariants au chargement
+  (pas de doublon, alias → valeur existante, fourchette des thèmes).
+- **Extraction en deux passes**, SQL écrit à la main, couche HTTP isolée (injectable → tests
+  sans réseau) :
+  - **GitHub** (`github_stack.py`) — langages API + manifestes (`package.json`,
+    `requirements.txt`, `pyproject.toml`, `go.mod`, `Cargo.toml`), parseurs purs, mappés sur
+    la taxonomie. Politesse PROJECT.md : UA identifiable, 1 req/s, un 403/rate-limit lève
+    `GitHubBlocked` et **arrête** la passe (pas de contournement). **Validé en réel** sur un
+    échantillon ethglobal (non authentifié).
+  - **LLM** (`llm_extract.py`) — OpenRouter, sortie structurée (JSON schema), taxonomies
+    injectées, sortie **re-filtrée côté client** (jamais confiance au modèle : hors-vocab
+    retiré, thèmes re-cappés à 3). Testée bout-en-bout avec client mocké.
+- **Staging + promotion explicite** — migration `0010` (`github_tech_staging`,
+  `llm_extraction_staging`). `run_extract.py` (flags `--pass`, `--source`, `--limit`,
+  `--only-missing`) écrit **uniquement** en staging ; `promote_enrichment.py` fusionne
+  (tech = GitHub sinon LLM ; thèmes = LLM ; `stack_source` posé en conséquence) et met à
+  jour `projects` — **seul chemin d'écriture** de `tech_stack`/`theme_tags`. `--dry-run`
+  pour compter d'abord. **Validé** : staging → promotion → `projects`.
+- **API** — `GET /themes` (index : les 42 thèmes + volumes/gagnants observés) et
+  `GET /themes/{slug}` (volume, gagnants, `win_rate`, **`methodology_note` de biais**,
+  stacks dominantes, projets). Slug validé contre la taxonomie (404 si inconnu ; un thème
+  valide sans projet renvoie une réponse vide propre). Taxonomie = source de vérité des
+  libellés, réutilisée côté API.
+- **Web** — pages `/themes` (index) et `/theme/[slug]` (ISR 24 h, stats + **note de biais
+  affichée** + stacks dominantes + liste projets), chips de thèmes cliquables sur la page
+  projet, lien « Thèmes » dans la nav. `pnpm typecheck` + `pnpm build` verts, rendu vérifié
+  au navigateur (avec un échantillon seedé puis retiré).
+- **Qualité** — `ruff` + `mypy --strict` clean, **+22 tests** (61 au total) : taxonomies,
+  parseurs de manifestes, client GitHub mocké (dont rate-limit), passe LLM mockée.
+
+### Décisions prises
+
+| Sujet | Décision | Raison |
+|---|---|---|
+| Source des thèmes | LLM sur taxonomie fermée **plate** (42, ≤ 3/projet) | Aucun signal de thème propre dans le corpus (`theme_tags` vide, `prize_track` = sponsors). Une taxo qui gonfle dilue les pages |
+| Périmètre du run | Machinerie + validation échantillon, **run complet reporté** | Clés API vides ; la passe LLM sur 21k projets coûte de l'argent — décision de dépense laissée à l'utilisateur |
+| Staging d'enrichissement | 2 tables (github/llm) + promotion fusionnante, pas d'écriture directe | Invariant PROJECT.md ; passes ré-exécutables indépendamment ; provenance claire |
+| `win_rate` par thème | Exposé **toujours** avec `methodology_note`, jamais seul | Contrainte PROJECT.md : ne pas présenter un chiffre biaisé comme conclusion |
+| Base de branche | `etape-3-recherche` (PR 3 non encore mergée) | `/theme` s'appuie sur l'infra existante ; PR 3 à merger avant/avec PR 4 |
+
+### En suspens / dette connue
+
+- **Passe GitHub à l'échelle non exécutée** — faute de `GITHUB_TOKEN` (60 req/h en anonyme,
+  insuffisant pour 7,5k repos ethglobal) ; seul un échantillon de 2 projets est en `github`.
+  La tech ethglobal vient donc du LLM ancré, pas des repos. À lancer quand un token sera
+  dispo : `run_extract --pass github --only-missing` puis `promote_enrichment` (la fusion
+  fait déjà primer github sur llm).
+- **Couverture tech volontairement basse (11 %)** — conséquence directe de l'ancrage : la
+  plupart des descriptions (surtout devpost, court seulement) ne nomment pas leur stack, donc
+  on ne la prétend pas. Choix assumé : précision > rappel. Remontera au rescrape (Étape 6,
+  descriptions complètes) et avec la passe GitHub.
+- **Biais « winners-only »** — devpost et ethglobal sont entièrement des gagnants dans le
+  corpus (seul lablab a des non-gagnants). Le `win_rate` par thème sera proche de 100 % tant
+  que le corpus reste ainsi : la note de biais est d'autant plus nécessaire. À revoir au
+  rescrape (Étape 6).
+- **Libellés de thèmes non dupliqués côté front** — les chips sur la page projet affichent le
+  slug (le libellé lisible vit dans la taxonomie / l'API). Acceptable ; à améliorer si besoin.
