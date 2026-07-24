@@ -40,14 +40,18 @@ def test_devpost_date_formats() -> None:
     assert _parse_devpost_date(None) is None
 
 
-def test_gallery_extracts_winners_only() -> None:
+def test_gallery_captures_all_and_flags_winners() -> None:
     entries = parse_gallery(GALLERY)
-    assert entries, "la gallery triée par prix doit contenir des gagnants"
+    assert entries, "la gallery doit contenir des entrées"
+    winners = [e for e in entries if e.is_winner]
+    assert winners, "au moins un gagnant marqué"
     for e in entries:
         assert e.software_slug and "/" not in e.software_slug
         assert e.url.startswith("https://devpost.com/software/")
         assert e.title
-        assert e.prize_track  # ruban de gagnant présent
+        # prize_track seulement pour les gagnants ; jamais pour un non-gagnant
+        if not e.is_winner:
+            assert e.prize_track is None
 
 
 def test_gallery_dedups_team_members() -> None:
@@ -57,8 +61,11 @@ def test_gallery_dedups_team_members() -> None:
             assert len(names) == len(set(names))  # pas de doublon
 
 
-def test_software_page_yields_full_description() -> None:
-    desc = parse_software_page(SOFTWARE)
-    assert desc is not None
+def test_software_page_yields_full_description_repo_and_tech() -> None:
+    detail = parse_software_page(SOFTWARE)
     # comble la dette « devpost = short_description seulement » : texte substantiel
-    assert len(desc) > 200
+    assert detail.description is not None and len(detail.description) > 200
+    # champs autrefois jetés, maintenant captés
+    assert detail.repo_url and detail.repo_url.startswith("https://github.com/")
+    assert detail.tech, "la liste « Built With » doit alimenter le tech brut"
+    assert all(t for t in detail.tech)

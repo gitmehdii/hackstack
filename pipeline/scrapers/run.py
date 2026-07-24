@@ -65,6 +65,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--live", action="store_true", help="scrape réseau (devpost/ethglobal)")
     parser.add_argument("--archive", metavar="PATH", help="ingestion hors ligne (lablab)")
     parser.add_argument("--cache", action="store_true", help="cache HTTP local (dev)")
+    parser.add_argument(
+        "--winners-only",
+        action="store_true",
+        help="ne capter que les gagnants (défaut : gagnants ET non-gagnants)",
+    )
     args = parser.parse_args(argv)
 
     # --archive (lablab uniquement) : ingestion hors ligne d'un export JSON de l'API.
@@ -86,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
 
     scraper = _SCRAPERS[args.source](use_cache=args.cache)
     try:
-        result = scraper.scrape(limit=args.limit)
+        result = scraper.scrape(limit=args.limit, winners_only=args.winners_only)
     except ScraperBlocked as exc:
         run_id = _persist_block(args.source, exc)
         print(

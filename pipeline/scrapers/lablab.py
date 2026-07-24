@@ -21,7 +21,11 @@ from pipeline.normalize.parse_helpers import LABLAB_MAP, clean
 from pipeline.normalize.schema import Hackathon, Project, RawTech, project_id
 from pipeline.scrapers.base import BaseScraper, ScrapeResult
 
-API_URL = "https://lablab.ai/api/v4/submissions?take=50&order=desc&filter=winners"
+_API_BASE = "https://lablab.ai/api/v4/submissions?take=50&order=desc"
+# filter=winners = projets placés (WINNERS/TOP_2/TOP_3/FINALISTS) ; sans filtre = toutes
+# les soumissions (les non-placés arrivent en position OTHER).
+API_URL = f"{_API_BASE}&filter=winners"
+API_URL_ALL = _API_BASE
 
 
 def _submission_to_project(sub: dict[str, Any]) -> tuple[Project, list[RawTech]] | None:
@@ -103,11 +107,16 @@ def ingest_archive(path: str | Path) -> ScrapeResult:
 class LablabScraper(BaseScraper):
     source = "lablab"
 
-    def scrape(self, limit: int | None = None) -> ScrapeResult:
-        """Live : paginé par cursor. Se fera challenger par Cloudflare (ScraperBlocked)."""
+    def scrape(self, limit: int | None = None, winners_only: bool = False) -> ScrapeResult:
+        """Live via l'API JSON publique, paginé par cursor.
+
+        `winners_only` → feed `filter=winners` (placés) ; sinon feed complet (tous les
+        projets, is_winner posé par eventPosition).
+        """
+        base = API_URL if winners_only else API_URL_ALL
         merged = ScrapeResult()
         seen_hackathons: set[str] = set()
-        url: str | None = API_URL
+        url: str | None = base
         while url is not None:
             payload = self.fetch_json(url)
             batch = parse_submissions(payload)
@@ -121,5 +130,5 @@ class LablabScraper(BaseScraper):
                 merged.projects = merged.projects[:limit]
                 break
             cursor = payload.get("nextCursor")
-            url = f"{API_URL}&cursor={cursor}" if cursor else None
+            url = f"{base}&cursor={cursor}" if cursor else None
         return merged

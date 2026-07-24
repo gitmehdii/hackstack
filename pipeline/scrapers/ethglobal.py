@@ -78,10 +78,15 @@ class EthListing:
     slug: str
     name: str
     tagline: str | None
+    has_prizes: bool
 
 
 def parse_listing(html: str) -> list[EthListing]:
-    """Projets d'une page showcase ayant au moins un prix (pur)."""
+    """**Tous** les projets d'une page showcase, `has_prizes` marqué (pur).
+
+    On ne filtre plus sur les projets primés : `has_prizes` (dérivé en `is_winner` après
+    la page projet) distingue. Le filtrage gagnants-only est une décision du scraper.
+    """
     for payload in extract_rsc_payloads(html):
         pos = payload.find('"projects":[{')
         if pos == -1:
@@ -92,14 +97,13 @@ def parse_listing(html: str) -> list[EthListing]:
             local = chunk[m.start() : m.start() + 3000]
             prizes_pos = local.find('"prizes":[')
             has_prizes = prizes_pos != -1 and local[prizes_pos + 10 :].lstrip()[:1] != "]"
-            if not has_prizes:
-                continue
             out.append(
                 EthListing(
                     uuid=m.group(1),
                     slug=m.group(2),
                     name=clean(m.group(3)) or m.group(2),
                     tagline=_str_field(local, "tagline"),
+                    has_prizes=has_prizes,
                 )
             )
         return out
@@ -251,10 +255,10 @@ def parse_project(html: str) -> EthProject | None:
 class EthglobalScraper(BaseScraper):
     source = "ethglobal"
 
-    def scrape(self, limit: int | None = None) -> ScrapeResult:
+    def scrape(self, limit: int | None = None, winners_only: bool = False) -> ScrapeResult:
         result = ScrapeResult()
         seen_hackathons: set[str] = set()
-        queue = self._scan_listing(limit)
+        queue = self._scan_listing(limit, winners_only)
         for listing in queue:
             url = f"{BASE}/showcase/{listing.slug}-{listing.uuid}"
             project = parse_project(self.fetch(url).text)
@@ -269,7 +273,7 @@ class EthglobalScraper(BaseScraper):
                 break
         return result
 
-    def _scan_listing(self, limit: int | None) -> list[EthListing]:
+    def _scan_listing(self, limit: int | None, winners_only: bool) -> list[EthListing]:
         found: list[EthListing] = []
         seen: set[str] = set()
         page = 1
@@ -280,6 +284,8 @@ class EthglobalScraper(BaseScraper):
             if not batch and 'href="/showcase/' not in fetched.text:
                 break
             for item in batch:
+                if winners_only and not item.has_prizes:
+                    continue
                 if item.uuid not in seen:
                     seen.add(item.uuid)
                     found.append(item)

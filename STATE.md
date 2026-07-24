@@ -367,6 +367,11 @@ pour ne pas frôler l'interdit « chiffre biaisé présenté comme conclusion »
   timeout, jamais sur 403), **détection anti-bot** (`detect_block` : 403/503 + marqueurs
   Cloudflare/captcha → `ScraperBlocked`, jamais de contournement), cache HTTP disque
   optionnel (`--cache`). Généralise le patron `_throttle`/`GitHubBlocked` de `github_stack`.
+- **Gagnants ET non-gagnants** (décision d'Étape 6, cf. PROJECT.md) — par défaut les scrapers
+  captent **tous** les projets des événements traversés, `is_winner` les distingue ;
+  `--winners-only` restreint aux gagnants. lablab : feed complet (non-filtré) par défaut,
+  `filter=winners` en winners-only. devpost : toutes les entrées de gallery. ethglobal :
+  showcase complet (`has_prizes` → `is_winner`). Débiaise `/trends` (analyses 3 & 5).
 - **Trois scrapers**, parsing **pur** (fonctions testables sans réseau) séparé de la couche
   HTTP :
   - **ethglobal** (`ethglobal.py`) — port Python de l'extraction RSC Next.js
@@ -376,7 +381,9 @@ pour ne pas frôler l'interdit « chiffre biaisé présenté comme conclusion »
     `$28`). Unicode RSC (`\uXXXX`) dé-échappé.
   - **devpost** (`devpost.py`) — 3 phases : API liste (dates de hackathon best-effort) →
     gallery HTML (ruban `img.winner` dans `aside.entry-badge`, selectolax, membres dédupés) →
-    page `/software/{slug}` pour la **description intégrale** (comble la dette devpost).
+    page `/software/{slug}` pour la **description intégrale + repo GitHub + démo + « Built
+    With »** (→ `raw_project_tech`). Comble la dette devpost (avant : tagline seule, ni repo
+    ni tech).
   - **lablab** (`lablab.py`) — **live via l'API JSON publique** `/api/v4/submissions`
     (sondée : 200, paginée par cursor, permise par `robots.txt` ; seule la surface HTML est
     Cloudflare). `parse_submissions` pur + `scrape()` live + `ingest_archive(winners.json)`
@@ -394,12 +401,13 @@ pour ne pas frôler l'interdit « chiffre biaisé présenté comme conclusion »
   synthétique). `test_base` (rate limit, robots disallow, détection anti-bot, cache) + un test
   par source (invariants : champs requis, winner/placement, **date parsée** pour ethglobal,
   tech mappée pour lablab, description résolue). **+24 tests (73 au total)**, sans réseau.
-- **Qualité & vérif** — `ruff` + `mypy --strict` clean. Migration appliquée. **Smoke-scrape
-  live poli** (1 req/s, robots respecté) sur les **trois** sources : ethglobal 5/5 avec
-  `hackathon_date` (2026-06-12) + description, devpost 3/3 (gagnants weatherwise), lablab 5/5
-  (via API publique) → `projects_staging`, tous en `scraped` et 100 % nouveaux vs `projects`.
-  **`projects` inchangée** (21 027). Chemin `blocked` vérifié (challenge Cloudflare mocké →
-  statut `blocked`, 0 ligne stagée, 0 `failed`).
+- **Qualité & vérif** — `ruff` + `mypy --strict` clean, **73 tests** verts (sans réseau).
+  Migration appliquée. **Smoke-scrape live poli** (1 req/s, robots respecté) sur les **trois**
+  sources, mode par défaut (gagnants + non-gagnants), 15/source : le mix `is_winner` est bien
+  présent (devpost 3 gagnants / 12 non ; ethglobal idem ; lablab 15 non-gagnants sur le feed
+  complet), `hackathon_date` non nul (ethglobal + devpost), **repo devpost capté** (5/15) et
+  **« Built With » → 90 tags bruts** (14/15). `projects` **inchangée** (21 027). Chemin
+  `blocked` vérifié (challenge Cloudflare mocké → statut `blocked`, 0 ligne stagée, 0 `failed`).
 
 ### Décisions prises
 
@@ -410,7 +418,9 @@ pour ne pas frôler l'interdit « chiffre biaisé présenté comme conclusion »
 | Statut d'un scrape réussi | Nouveau `scraped` (fini, non validé) | L'enum n'avait pas d'état terminal avant validation ; poser `validated` mentirait |
 | Fixtures | **Vraies** captures (devpost/ethglobal) + winners.json (lablab) | Tester le parsing sur du HTML/RSC réel, pas sur des maquettes ; démarre le compteur mainteneur |
 | Description devpost | Fetch de la page `/software/{slug}` | Comble la dette « short_description seulement » ; la fraîcheur profite aux embeddings futurs |
-| tech lablab scrapée | En `raw_project_tech` (`stack_source` reste `none`) | Cohérent avec l'import Ét. 1 ; la normalisation `tech_stack` est le job de l'Étape 4 |
+| Gagnants + non-gagnants | Capturer les deux par défaut, `is_winner` distingue, `--winners-only` en opt-in | Dataset = actif : filtrable a posteriori, jamais récupérable après coup ; débiaise `/trends`. Gagnants = vue par défaut, positionnement PROJECT.md préservé |
+| Champs devpost | Capter repo + démo + « Built With » (page déjà chargée) | Données à fort rendement, gratuites (même page) ; `raw_project_tech` alimenté (signal tech fiable) |
+| tech scrapée (lablab/devpost) | En `raw_project_tech` (`stack_source` reste `none`) | Cohérent avec l'import Ét. 1 ; la normalisation `tech_stack` est le job de l'Étape 4 |
 
 ### En suspens / dette connue
 

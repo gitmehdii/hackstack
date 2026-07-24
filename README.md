@@ -163,11 +163,18 @@ borné sur transitoire, cache HTTP local optionnel (`--cache`, dossier `.http_ca
 de contournement — et marque le run `blocked` (distinct de `failed`) avec un rapport dans
 `scrape_runs.notes` ; l'ouverture d'issue GitHub est câblée à l'Étape 7 (CI).
 
+Par défaut, un scrape capte **tous** les projets des événements traversés (gagnants **et**
+non-gagnants) ; `is_winner` les distingue. `--winners-only` restreint aux gagnants. Garder les
+non-gagnants rend le dataset filtrable a posteriori et débiaise `/trends` (cf. PROJECT.md).
+
 ```bash
 # Scrape poli des trois sources (réseau), borné, avec cache de dev
 python -m pipeline.scrapers.run --source ethglobal --live --limit 5 --cache
 python -m pipeline.scrapers.run --source devpost   --live --limit 5 --cache
 python -m pipeline.scrapers.run --source lablab    --live --limit 5 --cache
+
+# Gagnants uniquement (opt-in)
+python -m pipeline.scrapers.run --source devpost --live --winners-only
 
 # lablab peut aussi rejouer un export JSON de l'API hors ligne
 python -m pipeline.scrapers.run --source lablab --archive path/to/winners.json
@@ -181,8 +188,9 @@ python -m pipeline.scrapers.run --source lablab --archive path/to/winners.json
 
 ETHGlobal expose `event.startTime` et l'API Devpost expose les dates de hackathon : les
 scrapers **backfillent `hackathon_date`** (la donnée que `/trends` attend depuis l'Étape 5).
-Devpost récupère aussi la **description intégrale** de chaque projet (page `/software/{slug}`),
-comblant la dette « devpost = short_description seulement » du corpus importé.
+Devpost récupère aussi, sur la page `/software/{slug}`, la **description intégrale**, le
+**repo GitHub**, l'**URL de démo** et la liste **« Built With »** (→ `raw_project_tech`) —
+comblant la dette « devpost = short_description seulement, ni repo ni tech » du corpus importé.
 
 Les **tests de contrat** ([`pipeline/contracts/`](pipeline/contracts/)) tournent sur des
 fixtures figées, **sans réseau** (`pytest`), et vérifient les invariants de parsing de chaque

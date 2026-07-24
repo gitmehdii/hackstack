@@ -1,6 +1,12 @@
 # hackstack
 
-Base de données publique des projets de hackathon gagnants, avec recherche sémantique et analyse de tendances.
+Base de données publique des projets de hackathon, avec recherche sémantique et analyse de tendances.
+
+La base stocke les projets **gagnants et non-gagnants** (`is_winner` les distingue) : les
+gagnants restent la vue par défaut du site et du dataset, mais garder les non-gagnants rend
+le dataset plus précieux (on peut toujours filtrer, jamais récupérer après coup) et débiaise
+l'analyse de tendances (le contraste gagnant/perdant du même événement). Décision prise à
+l'Étape 6 ; cf. [STATE.md](STATE.md).
 
 Site web + pipeline de collecte open source + dataset public.
 

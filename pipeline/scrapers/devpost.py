@@ -10,6 +10,7 @@ Trois phases, chacune avec un parseur pur (testable sur fixture figée) :
 
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -18,7 +19,7 @@ from typing import Any
 from selectolax.parser import HTMLParser
 
 from pipeline.normalize.parse_helpers import clean
-from pipeline.normalize.schema import Hackathon, Project, project_id
+from pipeline.normalize.schema import Hackathon, Project, RawTech, project_id
 from pipeline.scrapers.base import BaseScraper, ScrapeResult
 
 HACKATHONS_API = (
@@ -94,21 +95,25 @@ class GalleryEntry:
     url: str
     title: str
     tagline: str | None
+    is_winner: bool
     prize_track: str | None
     team_name: str | None
 
 
 def parse_gallery(html: str) -> list[GalleryEntry]:
-    """Entrées gagnantes d'une page de gallery (pur, selectolax)."""
+    """**Toutes** les entrées d'une page de gallery, gagnants marqués (pur, selectolax).
+
+    On ne filtre plus sur les gagnants : `is_winner` distingue. Un gagnant porte un ruban
+    `<img class="winner">` dans un `<aside class="entry-badge">` ; le libellé du prix est le
+    texte du badge.
+    """
     tree = HTMLParser(html)
     entries: list[GalleryEntry] = []
     for node in tree.css("[data-software-id]"):
-        # Un gagnant porte un ruban <img class="winner"> dans un <aside class="entry-badge">
-        # (galleries devpost, tri par prix). Le libellé du prix est le texte du badge.
         badge = node.css_first("aside.entry-badge")
-        has_ribbon = node.css_first("img.winner") is not None
-        if not has_ribbon and not (badge and "winner" in badge.text().lower()):
-            continue
+        is_winner = node.css_first("img.winner") is not None or bool(
+            badge and "winner" in badge.text().lower()
+        )
         link = node.css_first("a.link-to-software") or node.css_first('a[href*="/software/"]')
         href = link.attributes.get("href") if link else None
         if not href:
@@ -134,28 +139,55 @@ def parse_gallery(html: str) -> list[GalleryEntry]:
                 url=href.split("?")[0],
                 title=title or m.group(1),
                 tagline=tagline,
-                prize_track=clean(badge.text()) if badge else None,
+                is_winner=is_winner,
+                prize_track=clean(badge.text()) if (badge and is_winner) else None,
                 team_name=team,
             )
         )
     return entries
 
 
-# --- Phase 3 : page projet (description intégrale) ---------------------------------
+# --- Phase 3 : page projet (description + repo + demo + tech) -----------------------
 
 
-def parse_software_page(html: str) -> str | None:
-    """Description longue d'une page /software/{slug} (pur)."""
+@dataclass(slots=True)
+class SoftwareDetail:
+    description: str | None
+    repo_url: str | None
+    demo_url: str | None
+    tech: list[str]
+
+
+def parse_software_page(html: str) -> SoftwareDetail:
+    """Détails d'une page /software/{slug} : description, repo, démo, « Built With » (pur)."""
     tree = HTMLParser(html)
+
+    description: str | None = None
     container = tree.css_first("#app-details-left") or tree.css_first("div#software-description")
     if container is not None:
-        text = clean(container.text(separator=" ", strip=True))
-        if text:
-            return text
-    meta = tree.css_first('meta[name="description"]')
-    if meta is not None:
-        return clean(meta.attributes.get("content"))
-    return None
+        description = clean(container.text(separator=" ", strip=True))
+    if not description:
+        meta = tree.css_first('meta[name="description"]')
+        if meta is not None:
+            description = clean(meta.attributes.get("content"))
+
+    # Liens « Try it out » : premier lien GitHub = repo, premier autre = démo.
+    repo_url: str | None = None
+    demo_url: str | None = None
+    for a in tree.css("nav.app-links a, .app-links a"):
+        href = clean(a.attributes.get("href"))
+        if not href or not href.startswith("http"):
+            continue
+        if "github.com" in href and repo_url is None:
+            repo_url = href
+        elif "github.com" not in href and demo_url is None:
+            demo_url = href
+
+    # « Built With » : liste de technos déclarées (signal fiable, -> raw_project_tech).
+    tech = [clean(t.text()) or "" for t in tree.css("#built-with .cp-tag")]
+    tech = [t for t in tech if t]
+
+    return SoftwareDetail(description=description, repo_url=repo_url, demo_url=demo_url, tech=tech)
 
 
 # --- Orchestration -----------------------------------------------------------------
@@ -164,7 +196,7 @@ def parse_software_page(html: str) -> str | None:
 class DevpostScraper(BaseScraper):
     source = "devpost"
 
-    def scrape(self, limit: int | None = None) -> ScrapeResult:
+    def scrape(self, limit: int | None = None, winners_only: bool = False) -> ScrapeResult:
         result = ScrapeResult()
         hackathons = self._list_hackathons(limit)
         for hk in hackathons:
@@ -178,7 +210,11 @@ class DevpostScraper(BaseScraper):
                 )
             )
             for entry in self._gallery_entries(hk.slug):
-                result.projects.append(self._entry_to_project(hk, entry))
+                if winners_only and not entry.is_winner:
+                    continue
+                project, raw_techs = self._entry_to_project(hk, entry)
+                result.projects.append(project)
+                result.raw_techs.extend(raw_techs)
                 if limit is not None and len(result.projects) >= limit:
                     return result
         return result
@@ -216,14 +252,18 @@ class DevpostScraper(BaseScraper):
             page += 1
         return entries
 
-    def _entry_to_project(self, hk: DevpostHackathon, entry: GalleryEntry) -> Project:
+    def _entry_to_project(
+        self, hk: DevpostHackathon, entry: GalleryEntry
+    ) -> tuple[Project, list[RawTech]]:
         pid = project_id("devpost", entry.software_slug)
-        description: str | None = None
-        try:
-            description = parse_software_page(self.fetch(entry.url).text)
-        except PermissionError:
-            description = None  # robots interdit la page projet : on garde la tagline
-        return Project(
+        detail = SoftwareDetail(description=None, repo_url=None, demo_url=None, tech=[])
+        # robots interdit la page projet : on garde les infos de la gallery.
+        with contextlib.suppress(PermissionError):
+            detail = parse_software_page(self.fetch(entry.url).text)
+        raw_techs = [
+            RawTech(project_id=pid, source="devpost", tech_name=name) for name in detail.tech
+        ]
+        project = Project(
             id=pid,
             source="devpost",
             source_url=entry.url,
@@ -231,11 +271,14 @@ class DevpostScraper(BaseScraper):
             hackathon_name=hk.title,
             hackathon_date=hk.hackathon_date,
             title=entry.title,
-            description=description,
+            description=detail.description,
             short_description=entry.tagline,
             placement=None,
-            raw_placement="WINNER",
-            is_winner=True,
+            raw_placement="WINNER" if entry.is_winner else None,
+            is_winner=entry.is_winner,
             prize_track=entry.prize_track,
             team_name=entry.team_name,
+            repo_url=detail.repo_url,
+            demo_url=detail.demo_url,
         )
+        return project, raw_techs

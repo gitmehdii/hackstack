@@ -250,5 +250,9 @@ class BaseScraper(ABC):
     # --- contrat -----------------------------------------------------------------
 
     @abstractmethod
-    def scrape(self, limit: int | None = None) -> ScrapeResult:
-        """Collecte et renvoie un lot normalisé (staging). Ne touche jamais `projects`."""
+    def scrape(self, limit: int | None = None, winners_only: bool = False) -> ScrapeResult:
+        """Collecte et renvoie un lot normalisé (staging). Ne touche jamais `projects`.
+
+        Par défaut capture **tous** les projets (gagnants et non-gagnants), `is_winner` les
+        distingue. `winners_only=True` restreint aux gagnants.
+        """

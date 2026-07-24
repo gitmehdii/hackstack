@@ -28,11 +28,14 @@ def test_rsc_payloads_extracted() -> None:
     assert len(extract_rsc_payloads(SHOWCASE)) > 0
 
 
-def test_listing_extracts_prized_projects() -> None:
+def test_listing_captures_all_projects_with_prize_flag() -> None:
     listing = parse_listing(SHOWCASE)
-    assert listing, "des projets primés attendus dans le showcase"
+    assert listing, "le showcase doit lister des projets"
     for item in listing:
         assert item.uuid and item.slug and item.name
+        assert isinstance(item.has_prizes, bool)
+    # au moins un projet primé (les gagnants) est marqué
+    assert any(item.has_prizes for item in listing)
 
 
 def test_project_has_event_date() -> None:

@@ -27,7 +27,9 @@ class _Probe(BaseScraper):
 
     source = "probe"
 
-    def scrape(self, limit: int | None = None) -> ScrapeResult:  # pragma: no cover
+    def scrape(
+        self, limit: int | None = None, winners_only: bool = False
+    ) -> ScrapeResult:  # pragma: no cover
         return ScrapeResult()
 
 
