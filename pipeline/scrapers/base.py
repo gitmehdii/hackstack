@@ -35,7 +35,7 @@ _MAX_RETRIES = 3
 _BACKOFF_BASE_S = 1.0
 _CACHE_DIR = Path(".http_cache")
 
-# Marqueurs de challenge anti-bot dans un corps de réponse (Cloudflare / captcha).
+# Marqueurs de challenge anti-bot, appliqués quand le STATUT est déjà suspect (403/503).
 _BLOCK_MARKERS = (
     "just a moment",
     "cf-chl",
@@ -45,6 +45,14 @@ _BLOCK_MARKERS = (
     "challenge-platform",
     "captcha",
     "verify you are human",
+)
+
+# Marqueurs stricts pour un corps en 200 (interstitiel Cloudflare) : tokens spécifiques à
+# Cloudflare, quasi impossibles dans du texte utilisateur — sinon on risque un faux positif
+# sur une description qui parle de « challenge platform » ou dit « just a moment ».
+_STRICT_BLOCK_MARKERS = (
+    "cf_chl_opt",
+    "cdn-cgi/challenge-platform",
 )
 
 
@@ -97,8 +105,9 @@ def detect_block(url: str, status: int, text: str) -> ScraperBlocked | None:
         # 403 sans marqueur = blocage sec (systématique) : on s'arrête aussi.
         if status == 403:
             return ScraperBlocked(f"403 sur {url}", url=url, status=403, marker=None)
-    # Même en 200, un corps de challenge (Cloudflare interstitiel) doit être attrapé.
-    for marker in ("just a moment", "cf_chl_opt", "challenge-platform"):
+    # Même en 200, un interstitiel Cloudflare doit être attrapé — mais seulement sur des
+    # tokens stricts, pour ne pas confondre avec une description utilisateur.
+    for marker in _STRICT_BLOCK_MARKERS:
         if marker in lowered:
             return ScraperBlocked(
                 f"page de challenge ({marker}) sur {url}", url=url, status=status, marker=marker

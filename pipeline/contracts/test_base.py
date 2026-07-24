@@ -69,6 +69,13 @@ def test_detect_block_passes_normal_pages() -> None:
     assert detect_block("https://x.test/p", 404, "<html>not found</html>") is None
 
 
+def test_detect_block_no_false_positive_on_user_content() -> None:
+    # Une description de projet peut légitimement contenir ces mots : un 200 ne doit PAS
+    # être pris pour un challenge sur ces seuls termes.
+    prose = "Our web3 challenge platform lets you win. Just a moment of setup and you captcha it."
+    assert detect_block("https://ethglobal.com/showcase/x", 200, prose) is None
+
+
 def test_fetch_raises_scraper_blocked_on_challenge() -> None:
     html = (FIXTURES / "lablab_cloudflare_challenge.html").read_text(encoding="utf-8")
 
