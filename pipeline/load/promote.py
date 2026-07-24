@@ -26,9 +26,7 @@ _PROJECT_COLS = (
 
 
 def _latest_validated_run(cur: psycopg.Cursor) -> int:
-    cur.execute(
-        "SELECT id FROM scrape_runs WHERE status='validated' ORDER BY id DESC LIMIT 1"
-    )
+    cur.execute("SELECT id FROM scrape_runs WHERE status='validated' ORDER BY id DESC LIMIT 1")
     row = cur.fetchone()
     if row is None:
         raise RuntimeError("Aucun run 'validated' à promouvoir.")

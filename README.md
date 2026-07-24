@@ -25,7 +25,10 @@ et analyse de tendances. Voir [PROJECT.md](PROJECT.md) pour la vision complète.
 - [x] **Étape 6 — Scraping (acquisition)** : classe de base polie, scrapers devpost /
       ethglobal / lablab, tests de contrat sur fixtures figées. Écrit en staging ; la
       promotion reste conditionnée à la validation (Étape 7). Cf. [STATE.md](STATE.md).
-- [ ] Étape 7 — Validation & automatisation
+- [x] **Étape 7 — Validation & automatisation** : validation avant promotion (double
+      baseline mobile/ancre, contrôles unilatéraux, seuils dans `thresholds.yaml`),
+      statut `rejected` + rapport de diff, workflows GitHub Actions (CI + hebdo avec
+      issue auto). Cf. [STATE.md](STATE.md).
 - [ ] Étape 8 — Dataset public
 - [ ] Étape 9 — Agent mainteneur
 
@@ -194,7 +197,43 @@ comblant la dette « devpost = short_description seulement, ni repo ni tech » d
 
 Les **tests de contrat** ([`pipeline/contracts/`](pipeline/contracts/)) tournent sur des
 fixtures figées, **sans réseau** (`pytest`), et vérifient les invariants de parsing de chaque
-source. Ils démarrent le compteur « un mois » exigé avant l'agent mainteneur (Étape 9).
+source. Ils démarrent le compteur « un mois » exigé avant l'agent mainteneur (Étape 9). Leurs
+fixtures sont **anonymisées** (descriptions intégrales remplacées par du filler, cf.
+[`scrub_fixtures.py`](pipeline/contracts/scrub_fixtures.py)) pour ne pas republier de texte.
+
+## Validation & automatisation (Étape 7)
+
+Rien n'entre dans `projects` sans passer la **validation avant promotion**. Un run `scraped`
+est comparé, **par source**, à deux baselines (seuils dans
+[`pipeline/contracts/thresholds.yaml`](pipeline/contracts/thresholds.yaml), jamais en dur) :
+
+- **moving** — l'état accumulé de `projects` (baseline mobile, seuils resserrés) ;
+- **anchor** — le premier run promu de la source (corpus d'origine, figé, seuils larges) —
+  capte la **dérive lente** qu'une baseline mobile masquerait.
+
+Les contrôles (taux de non-null par colonne, médiane des descriptions, projets par hackathon
+sur le **recouvrement**, taux de placement, URLs bien formées) sont **unilatéraux** : ils ne
+flaguent que les *baisses* (une casse de scraper = de la donnée qui disparaît). Un champ qui se
+remplit **davantage** (ex. backfill de dates) ne bloque jamais la promotion.
+
+```bash
+# Valide tous les runs 'scraped' en attente (promotion si OK), écrit un rapport de diff
+python -m pipeline.load.validate --report validation_report.md
+
+# Un run précis, sans promouvoir (inspection)
+python -m pipeline.load.validate --run 12 --no-promote
+```
+
+Si un seuil est franchi : le run passe **`rejected`**, `projects` reste **inchangée**, et un
+rapport de diff est produit (une ligne `contract_checks` par contrôle). `rejected` est distinct
+de `failed` (bug) et `blocked` (anti-bot) — la CI traite les trois différemment.
+
+**GitHub Actions** — [`ci.yml`](.github/workflows/ci.yml) : lint + types + tests sur chaque
+push/PR (sans DB ni réseau). [`weekly.yml`](.github/workflows/weekly.yml) : hebdomadaire —
+(1) rejoue les tests de contrat sur fixtures figées (Niveau-1 détection du mainteneur) et
+ouvre une issue en cas de rupture ; (2) si le secret `DATABASE_URL` est configuré, enchaîne
+scrape → validation → promotion et ouvre une issue sur rejet ou blocage. Sans le secret, le
+volet scrape live se saute proprement.
 
 ## Le corpus importé
 

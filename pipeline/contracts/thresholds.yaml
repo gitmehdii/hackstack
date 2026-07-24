@@ -1,0 +1,47 @@
+# Seuils de validation avant promotion (Étape 7).
+#
+# Un batch en staging est comparé à DEUX baselines par source, et TOUS les contrôles
+# doivent passer pour promouvoir :
+#
+#   moving : batch vs état accumulé de `projects` (par source). Baseline mobile, seuils
+#            resserrés — capte les ruptures franches d'un run à l'autre.
+#   anchor : batch vs premier run promu contenant la source (corpus d'origine, figé).
+#            Baseline immobile, seuils plus larges — capte la DÉRIVE LENTE qu'une
+#            baseline mobile masquerait (une dégradation de quelques % par run reste
+#            indéfiniment sous le seuil « moving » car la baseline suit la dérive).
+#
+# null_rate : écart du taux de non-null par colonne. Mode PAR colonne :
+#   absolute — |Δtaux| en points (colonnes à fort remplissage : description, hackathon_date)
+#   relative — |Δtaux| / taux_baseline en %  (colonnes à faible remplissage : repo/demo/prize).
+#     Le relatif évite qu'une chute 12 %→2 % (perte de 83 % du signal) passe sous un seuil
+#     absolu de 15 points. Garde : si taux_baseline == 0, le contrôle relatif PASSE
+#     (impossible de dégrader sous zéro ; de la donnée qui apparaît est un gain).
+#
+# Rien n'est en dur dans le code : ce fichier est la seule source des seuils.
+
+moving:
+  null_rate:
+    description:    {mode: absolute, max_delta_points: 15}
+    hackathon_date: {mode: absolute, max_delta_points: 15}
+    repo_url:       {mode: relative, max_pct: 50}
+    demo_url:       {mode: relative, max_pct: 50}
+    prize_track:    {mode: relative, max_pct: 50}
+  median_desc_len_max_pct: 40
+  projects_per_hackathon_max_pct: 50
+  placement_fill_max_delta_points: 15
+
+anchor:
+  null_rate:
+    description:    {mode: absolute, max_delta_points: 25}
+    hackathon_date: {mode: absolute, max_delta_points: 25}
+    repo_url:       {mode: relative, max_pct: 75}
+    demo_url:       {mode: relative, max_pct: 75}
+    prize_track:    {mode: relative, max_pct: 75}
+  median_desc_len_max_pct: 60
+  projects_per_hackathon_max_pct: 75
+  placement_fill_max_delta_points: 25
+
+# Contrôle absolu sur le batch, indépendant de toute baseline : les URLs présentes
+# doivent être bien formées (^https?://). Un batch dont trop d'URLs sont cassées est
+# rejeté même si les taux de remplissage sont stables.
+url_valid_min_rate: 0.90

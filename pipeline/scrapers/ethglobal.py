@@ -29,12 +29,7 @@ _UNICODE_ESC_RE = re.compile(r"\\u([0-9a-fA-F]{4})")
 
 
 def _unescape(text: str) -> str:
-    text = (
-        text.replace("\\n", "\n")
-        .replace("\\t", "\t")
-        .replace("\\r", "\r")
-        .replace('\\"', '"')
-    )
+    text = text.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r").replace('\\"', '"')
     text = _UNICODE_ESC_RE.sub(lambda m: chr(int(m.group(1), 16)), text)
     return text.replace("\\\\", "\\")
 

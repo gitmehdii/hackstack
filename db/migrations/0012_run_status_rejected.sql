@@ -1,0 +1,12 @@
+-- Étape 7 : statut terminal supplémentaire pour un run dont la VALIDATION échoue.
+--   rejected : la validation avant promotion a dépassé un seuil (thresholds.yaml).
+--              `projects` reste inchangée, un rapport de diff est produit, une issue
+--              GitHub est ouverte par la CI. Distinct de :
+--                - failed  : échec technique (bug du scraper / du pipeline)
+--                - blocked : arrêt sur blocage anti-bot (Cloudflare/captcha/403)
+--              La CI traite les trois différemment (un rejet n'est ni un bug ni un
+--              blocage : c'est une donnée qui dérive au-delà du toléré).
+-- La migration se contente d'ADD VALUE : la valeur 'rejected' n'est JAMAIS utilisée ici.
+-- migrate.py commit chaque fichier avant tout usage (cf. 0011, éprouvé en prod PG 16) ;
+-- 'rejected' n'est consommé que plus tard, dans une connexion séparée (pipeline.load.validate).
+ALTER TYPE run_status_t ADD VALUE IF NOT EXISTS 'rejected';

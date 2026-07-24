@@ -441,3 +441,98 @@ pour ne pas frôler l'interdit « chiffre biaisé présenté comme conclusion »
 - **Robustesse des sélecteurs = surface du mainteneur (Étape 9)** — les tests de contrat sur
   fixtures figées sont le Niveau 1 (détection). Ils doivent tourner ~1 mois avant d'envisager
   les niveaux diagnostic/correction.
+
+---
+
+## Étape 7 — Validation & automatisation ✅
+
+**Statut : terminée.** Branche `etape-7-validation` (depuis `main`). Pose la barrière de
+validation avant promotion et rend le scrape récurrent (CI). Le seul chemin d'écriture de
+`projects` reste la promotion, désormais **conditionnée à la validation**.
+
+### Fait
+
+- **Logique de validation pure** (`pipeline/contracts/validate.py`, sans DB → cœur testable) —
+  un batch en staging est comparé **par source** à deux baselines : **moving** (état accumulé de
+  `projects`, seuils resserrés) et **anchor** (premier run promu de la source, corpus d'origine
+  figé, seuils larges). L'ancre capte la **dérive lente** qu'une baseline mobile masquerait (une
+  dégradation de quelques %/run suit la baseline et ne déclenche jamais « moving »). Bootstrap
+  si une baseline est vide (comparaison sautée). Rapport de diff markdown (`render_report`).
+- **Contrôles unilatéraux** — taux de non-null par colonne, médiane des descriptions, projets
+  par hackathon, taux de placement : tous ne flaguent que les **baisses** (dégradation = casse de
+  scraper). Un champ qui se remplit **davantage** (backfill de dates 0→100 %) ou des descriptions
+  plus longues ne bloquent jamais. Découvert en vérif réelle : un seuil symétrique rejetait le
+  backfill de l'Étape 6 (deadlock : le batch amélioré n'aurait jamais été promu).
+- **Seuil de non-null typé par colonne** (`thresholds.yaml`) — **absolu** (points) pour les
+  colonnes à fort remplissage (`description`, `hackathon_date`), **relatif** (%) pour les
+  colonnes à faible remplissage (`repo_url`, `demo_url`, `prize_track`) : sinon une chute
+  12 %→2 % (perte de 83 % du signal) passerait sous un seuil absolu de 15 points. `url_valid` est
+  un contrôle **absolu** sur le batch (bonne formation, indépendant de la baseline).
+- **Projets/hackathon sur recouvrement** — comparé **uniquement** sur les hackathons présents à
+  la fois dans le batch et la baseline (un batch incrémental couvre peu de hackathons du corpus
+  entier ; batch-vs-corpus rejetterait toujours). Aucun hackathon commun → contrôle sauté.
+- **Orchestration DB** (`pipeline/load/validate.py`) — `compute_metrics` (SQL agrégé :
+  `percentile_cont` pour la médiane, `avg(... IS NOT NULL)` pour les taux, comptes par
+  hackathon, `~ '^https?://'` pour les URLs), `first_promoted_run` (ancre), `validate_run` :
+  écrit **une ligne `contract_checks` par contrôle**, pose `validated` puis appelle
+  `promote(run_id)` (réutilisé tel quel) si tout passe, sinon `rejected` + rapport, `projects`
+  inchangée. CLI `--run` / `--report` / `--no-promote` ; sans `--run`, valide tous les `scraped`.
+- **Migration `0012`** — statut `rejected` (validation échouée), distinct de `failed` (bug) et
+  `blocked` (anti-bot). `ADD VALUE` seul, sans usage dans la migration (commit-avant-usage par
+  `migrate.py`, chemin éprouvé par `0011`).
+- **Fixtures anonymisées** (`pipeline/contracts/scrub_fixtures.py`, re-exécutable) — les
+  descriptions **intégrales** des fixtures (RSC inline + chunks/​pushes RSC + DOM rendu pour
+  ethglobal ; `#app-details-left` + metas pour devpost ; champ `description` pour lablab) sont
+  remplacées par du filler de longueur suffisante (les tests vérifient `len > 80/200`),
+  structure et cadre RSC préservés. Titres et taglines courtes (extraits) conservés — ce que
+  PROJECT.md autorise à publier. `--check` échoue si un résidu subsiste (garde CI).
+- **GitHub Actions** — `ci.yml` (lint + format + `mypy` + `pytest` + garde scrub, sans DB/
+  réseau) sur push/PR ; `weekly.yml` (cron lundi 06:00 UTC + dispatch) : job `contract-tests`
+  (fixtures figées → Niveau-1, issue auto sur rupture) + job `live-scrape` gardé par la présence
+  du secret `DATABASE_URL` (scrape→validate→promote, issue auto sur rejet/blocage). L'ouverture
+  d'issue vit dans le YAML (effet de bord côté CI, hors Python — décision d'Étape 6).
+- **Qualité & vérif** — `ruff` + `mypy --strict` clean, **94 tests** verts (+20, sans réseau).
+  Migration `0012` appliquée. **Vérifié bout-en-bout sur la DB réelle** (21 027 projets, laissée
+  intacte) : chemin **nominal** (batch = tout ethglobal → `validated` puis `promoted`,
+  `n_promoted=7647`, 17 `contract_checks` tous verts), chemin **rejet** (description→NULL →
+  `rejected`, rapport de diff, `projects` inchangée, checks tracés), chemin **bootstrap**
+  (source sans baseline → `moving:bootstrap`/`anchor:bootstrap`). La nouvelle sémantique
+  unilatérale confirmée : le backfill `hackathon_date` 0→100 % **passe** désormais.
+
+### Décisions prises
+
+| Sujet | Décision | Raison |
+|---|---|---|
+| Baseline | **Double** : moving (`projects` accumulé) + anchor (1er run promu, figé) | Une baseline mobile seule laisse dériver indéfiniment ; l'ancre borne la dérive lente |
+| Sens des contrôles | **Unilatéral** (baisses seulement), dévie du « écart » symétrique de PROJECT.md | Une casse = perte de données ; un gain de complétude (backfill dates) ne doit jamais bloquer — sinon deadlock. Constaté en vérif réelle |
+| Non-null par colonne | **Absolu** (fort remplissage) vs **relatif** (faible remplissage) | Un seuil absolu unique écrase les colonnes basses : 12 %→2 % (−83 %) passerait sous 15 pts |
+| Projets/hackathon | Comparé sur le **recouvrement**, pas batch-vs-corpus | Un batch incrémental a toujours peu de projets/hackathon vs le corpus entier → faux rejet permanent |
+| Statut d'un rejet | Nouveau `rejected` (migration 0012), ≠ `failed` ≠ `blocked` | 3 causes, 3 traitements CI distincts ; cohérent avec `blocked`≠`failed` (Étape 6) |
+| Promotion | `validate_run` réutilise `promote(run_id)` après avoir posé `validated` | Un seul chemin d'écriture de `projects`, pas de duplication de l'INSERT |
+| Ouverture d'issue | Dans le **YAML** de la CI, pas dans le Python | Effet de bord imprévisible en local ; le Python reste pur (écrit un rapport, sort en code non nul) |
+| Fixtures | **Anonymisées maintenant** (script re-exécutable), titres/extraits gardés | « Pas de descriptions intégrales publiées » (PROJECT.md) s'applique dès le passage public ; extraits/titres restent autorisés |
+| Workflow hebdo | 2 jobs, scrape live **gardé par le secret** `DATABASE_URL` | Aucune base de prod déployée ; les tests de contrat (Niveau-1) tournent sans secret, le scrape se saute proprement |
+
+### En suspens / dette connue
+
+- **⚠️ BLOQUANT avant tout passage public du repo — historique git.** Les fixtures ont été
+  anonymisées dans l'arbre courant, mais les **blobs pré-scrub restent dans l'historique git**
+  (commits de l'Étape 6, déjà sur `main`). Le repo est privé ; le rendre public exposerait ces
+  descriptions intégrales. **Prérequis dur** : réécrire l'historique (`git filter-repo` / BFG)
+  pour purger les anciens blobs de fixtures **avant** de passer public — ou ne jamais passer
+  public tant que ce n'est pas fait. Ce n'est pas une dette molle : une fois public, l'historique
+  est irrécupérable.
+- **Décalage gagnants→gagnants+non-gagnants** (Étape 6) — le premier scrape réel d'une source
+  fait chuter `prize_track` (ex. 100 %→20 % sur ethglobal) : la validation le **rejette
+  légitimement** (baisse réelle), une **approbation humaine unique** est attendue, après quoi la
+  baseline moving intègre le nouveau régime. C'est le humain-dans-la-boucle voulu, pas un bug.
+- **Seuils = valeurs de départ** — `thresholds.yaml` porte des seuils raisonnables mais non
+  calibrés sur l'historique (aucun n'existe encore). À ajuster une fois quelques scrapes hebdo
+  accumulés (faux positifs/négatifs observés).
+- **Scrape live hebdo non activé** — faute de base de prod déployée + secret `DATABASE_URL`
+  (action externe, cf. dette Étape 2). Le volet `live-scrape` se saute proprement d'ici là ; les
+  tests de contrat hebdo, eux, tournent déjà.
+- **Note PROJECT.md** — les contrôles unilatéraux et le recouvrement dévient du texte littéral
+  (« écart max toléré », « nombre de projets par hackathon »). Justifié par la vérif réelle ;
+  à répercuter dans PROJECT.md §« Validation avant promotion » si l'on veut garder spec et
+  implémentation alignées (non fait ici : PROJECT.md appartient à l'auteur).
