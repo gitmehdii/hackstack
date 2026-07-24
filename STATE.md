@@ -536,3 +536,53 @@ validation avant promotion et rend le scrape récurrent (CI). Le seul chemin d'�
   (« écart max toléré », « nombre de projets par hackathon »). Justifié par la vérif réelle ;
   à répercuter dans PROJECT.md §« Validation avant promotion » si l'on veut garder spec et
   implémentation alignées (non fait ici : PROJECT.md appartient à l'auteur).
+
+---
+
+## État courant & feuille de route (2026-07-25)
+
+Instantané de la base (docker local) et priorités des prochains jours. La structure des
+étapes (PROJECT.md) est inchangée ; ceci capture l'état *dans* les étapes et le chemin critique.
+
+### Instantané, vérifié en base le 2026-07-25
+
+| Donnée | État | Impact |
+|---|---|---|
+| `projects` | 21 027 | — |
+| **embeddings** | **1 536 / 21 027 (7 %)** | backfill Ét.3 **jamais terminé** → recherche surtout full-text, peu de sémantique |
+| thèmes | 18 024 (85 %) | Ét.4 OK |
+| **`hackathon_date`** | **0 / 21 027 (0 %)** | dates en staging non promues → analyses 1 & 2 de `/trends` **éteintes** |
+| déploiement | **aucun** | Supabase / API VPS / front Vercel non faits (livrable *déployable*, pas déployé) |
+| `scrape_runs` | 1 `promoted` (import) + 3 `scraped` | runs smoke (15 lignes) en attente ; seraient rejetés (batch non représentatif) |
+
+### Feuille de route (priorité décroissante)
+
+**Chemin critique — « le site marche » (préalable à tout passage public) :**
+
+1. **Finir le backfill embeddings** — relancer `python -m pipeline.embed.embed` (idempotent,
+   `WHERE embedding IS NULL`). ~11 h sur CPU. Plus gros levier de qualité de la recherche.
+2. **Déployer la stack** — Supabase (base) + API sur VPS + front sur Vercel. Aujourd'hui aucun
+   site en ligne.
+3. **Un scrape réel complet** (sans `--limit`) d'une source → `python -m pipeline.load.validate`
+   → **approuver une fois** le décalage gagnants/non-gagnants → promotion. Allume les dates
+   (trends 1 & 2 s'activent seules) et pousse les descriptions devpost fraîches (meilleurs
+   embeddings).
+
+**Consolidation :**
+
+4. Brancher le secret `DATABASE_URL` en CI → le job hebdo `live-scrape` tourne pour de vrai ;
+   laisser courir le compteur ~1 mois des tests de contrat (Niveau-1 mainteneur).
+5. **Étape 8 — export dataset HuggingFace** : script à écrire (métadonnées + dérivés +
+   embeddings, **jamais** `description`/`fts`/embedding brut). Le construire maintenant, publier
+   plus tard.
+
+**Plus tard / bloqué (repo privé pour l'instant, décision 2026-07-25) :**
+
+6. Avant tout passage public : lire les CGU des 3 sites, purger l'historique git des blobs de
+   fixtures pré-scrub, sortir `pipeline/scrapers/` + `pipeline/contracts/fixtures/` de
+   l'artefact public.
+7. **Étape 9 — agent mainteneur** : à ne commencer qu'après ~1 mois de tests de contrat
+   (compteur démarré à l'Étape 7).
+
+Nettoyage mineur : les 3 runs `scraped` smoke (8/9/10) peuvent être supprimés ou validés (ils
+seraient rejetés — normal, batch de 15 lignes non représentatif).
