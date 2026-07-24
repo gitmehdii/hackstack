@@ -400,8 +400,9 @@ pour ne pas frôler l'interdit « chiffre biaisé présenté comme conclusion »
   captées au smoke-scrape ; lablab = sous-ensemble de `winners.json` + challenge Cloudflare
   synthétique). `test_base` (rate limit, robots disallow, détection anti-bot, cache) + un test
   par source (invariants : champs requis, winner/placement, **date parsée** pour ethglobal,
-  tech mappée pour lablab, description résolue). **+24 tests (73 au total)**, sans réseau.
-- **Qualité & vérif** — `ruff` + `mypy --strict` clean, **73 tests** verts (sans réseau).
+  tech mappée pour lablab, description résolue ; faux positif anti-bot sur du texte
+  utilisateur). **+25 tests (74 au total)**, sans réseau.
+- **Qualité & vérif** — `ruff` + `mypy --strict` clean, **74 tests** verts (sans réseau).
   Migration appliquée. **Smoke-scrape live poli** (1 req/s, robots respecté) sur les **trois**
   sources, mode par défaut (gagnants + non-gagnants), 15/source : le mix `is_winner` est bien
   présent (devpost 3 gagnants / 12 non ; ethglobal idem ; lablab 15 non-gagnants sur le feed
