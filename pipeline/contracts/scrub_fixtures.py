@@ -28,6 +28,7 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -146,7 +147,7 @@ def scrub_lablab_json(text: str) -> str:
 # --------------------------------------------------------------------------- pilote
 
 # fixture -> fonction de scrub
-_TARGETS: dict[str, object] = {
+_TARGETS: dict[str, Callable[[str], str]] = {
     "ethglobal_project.html": scrub_ethglobal,
     "ethglobal_project_ref_desc.html": scrub_ethglobal,
     "ethglobal_showcase.html": scrub_ethglobal,
@@ -170,7 +171,7 @@ def apply_all() -> None:
     for name, fn in _TARGETS.items():
         path = FIXTURES / name
         text = path.read_text(encoding="utf-8")
-        scrubbed = fn(text)  # type: ignore[operator]
+        scrubbed = fn(text)
         path.write_text(scrubbed, encoding="utf-8")
         print(f"scrub {name}")
 

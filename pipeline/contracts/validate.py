@@ -124,6 +124,15 @@ def _profile(label: str, raw: object) -> Profile:
     if not isinstance(nr, dict) or not nr:
         raise ValueError(f"thresholds[{label}].null_rate manquant ou vide")
     rules = {col: _column_rule(label, col, spec) for col, spec in nr.items()}
+    # Une colonne non mesurée passerait toujours en silence (fill_rate.get -> 0.0 des deux
+    # côtés) : on refuse toute colonne hors du vocabulaire mesuré plutôt que de désactiver
+    # un contrôle sur une faute de frappe.
+    unknown = set(rules) - set(NULL_RATE_COLUMNS)
+    if unknown:
+        raise ValueError(
+            f"thresholds[{label}].null_rate : colonnes inconnues {sorted(unknown)} "
+            f"(mesurées : {list(NULL_RATE_COLUMNS)})"
+        )
     return Profile(
         label=label,
         null_rate=rules,

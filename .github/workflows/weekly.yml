@@ -32,9 +32,12 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen
       - name: Tests de contrat (fixtures figées)
+        id: tests
         run: uv run pytest pipeline/contracts -q | tee contract_output.txt
       - name: Issue si rupture de contrat
-        if: failure()
+        # Uniquement si CE sont les tests qui cassent (pas une panne d'install/setup amont) :
+        # sinon on ouvrirait une issue « scraper cassé » trompeuse.
+        if: always() && steps.tests.outcome == 'failure'
         run: |
           title="[contrats] rupture détectée sur fixtures ($(date -u +%F))"
           {

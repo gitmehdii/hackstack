@@ -108,6 +108,21 @@ def test_load_thresholds_bad_mode(tmp_path: Path) -> None:
         load_thresholds(_write(tmp_path, bad))
 
 
+def test_load_thresholds_rejects_unknown_column(tmp_path: Path) -> None:
+    # Une colonne non mesurée passerait toujours en silence : le loader doit la refuser.
+    bad = (
+        "moving:\n  null_rate:\n    repo_urls: {mode: relative, max_pct: 50}\n"
+        "  median_desc_len_max_pct: 40\n  projects_per_hackathon_max_pct: 50\n"
+        "  placement_fill_max_delta_points: 15\n"
+        "anchor:\n  null_rate:\n    description: {mode: absolute, max_delta_points: 5}\n"
+        "  median_desc_len_max_pct: 60\n  projects_per_hackathon_max_pct: 75\n"
+        "  placement_fill_max_delta_points: 25\n"
+        "url_valid_min_rate: 0.9\n"
+    )
+    with pytest.raises(ValueError, match="colonnes inconnues"):
+        load_thresholds(_write(tmp_path, bad))
+
+
 def test_load_thresholds_url_rate_out_of_range(tmp_path: Path) -> None:
     ok_profile = (
         "  null_rate:\n    description: {mode: absolute, max_delta_points: 5}\n"

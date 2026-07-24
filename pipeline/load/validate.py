@@ -66,8 +66,10 @@ _HACK_SQL = """
     GROUP BY hackathon_slug
 """
 
+# Même règle que contracts.validate.valid_url (schéma http(s) + hôte), en SQL pour rester
+# ensembliste : `~*` insensible à la casse comme valid_url, un caractère requis après `//`.
 _URL_SQL = """
-    SELECT avg((u ~ '^https?://.')::int)::float AS url_valid
+    SELECT avg((u ~* '^https?://.')::int)::float AS url_valid
     FROM {table}, LATERAL unnest(ARRAY[source_url, repo_url, demo_url]) AS u
     WHERE ({where}) AND u IS NOT NULL
 """
@@ -126,10 +128,13 @@ def _run_source(cur: psycopg.Cursor[Any], run_id: int) -> str:
         raise RuntimeError(f"run #{run_id} introuvable")
     if row["source"] is None:
         raise RuntimeError(f"run #{run_id} sans source : non validable (import multi-sources ?)")
-    if row["status"] != "scraped":
+    # 'validated' est ré-drivable : si promote() a échoué APRÈS le commit du statut (la
+    # promotion ouvre sa propre connexion, cf. _process), relancer la validation ré-évalue et
+    # re-promeut. 'promoted' est terminal (on ne re-promeut pas), 'scraped' est le cas nominal.
+    if row["status"] not in ("scraped", "validated"):
         raise RuntimeError(
-            f"run #{run_id} en statut '{row['status']}' (attendu 'scraped') : "
-            "déjà validé/promu, ou non terminé."
+            f"run #{run_id} en statut '{row['status']}' (attendu 'scraped' ou 'validated') : "
+            "déjà promu, rejeté, ou non terminé."
         )
     return str(row["source"])
 
@@ -170,6 +175,9 @@ def _evaluate(
 def _write_checks(
     cur: psycopg.Cursor[Any], run_id: int, source: str, checks: list[CheckResult]
 ) -> None:
+    # Idempotent : une ré-validation (ex. reprise d'un run 'validated' resté non promu) ne
+    # doit pas empiler des doublons de contrôles.
+    cur.execute("DELETE FROM contract_checks WHERE scrape_run_id = %s", (run_id,))
     cur.executemany(
         "INSERT INTO contract_checks (scrape_run_id, source, check_name, passed, detail) "
         "VALUES (%s, %s, %s, %s, %s)",
@@ -216,13 +224,16 @@ def validate_run(run_id: int, *, report_path: str | None = None, do_promote: boo
 
 
 def _pending_scraped(cur: psycopg.Cursor[Any]) -> list[int]:
-    cur.execute("SELECT id FROM scrape_runs WHERE status = 'scraped' ORDER BY id")
+    # 'validated' inclus : reprise d'un run validé mais non promu (promote() échoué après coup).
+    cur.execute("SELECT id FROM scrape_runs WHERE status IN ('scraped','validated') ORDER BY id")
     return [int(r[0]) for r in cur.fetchall()]
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Valide un run en staging avant promotion.")
-    ap.add_argument("--run", type=int, default=None, help="run précis (défaut : tous les scraped)")
+    ap.add_argument(
+        "--run", type=int, default=None, help="run précis (défaut : tous scraped/validated)"
+    )
     ap.add_argument("--report", metavar="FILE", default=None, help="écrit le rapport de diff")
     ap.add_argument("--no-promote", action="store_true", help="valide sans promouvoir")
     args = ap.parse_args(argv)
