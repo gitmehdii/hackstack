@@ -30,10 +30,10 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --frozen
+      - run: uv sync --frozen --extra dev
       - name: Tests de contrat (fixtures figées)
         id: tests
-        run: uv run pytest pipeline/contracts -q | tee contract_output.txt
+        run: uv run --frozen --extra dev pytest pipeline/contracts -q | tee contract_output.txt
       - name: Issue si rupture de contrat
         # Uniquement si CE sont les tests qui cassent (pas une panne d'install/setup amont) :
         # sinon on ouvrirait une issue « scraper cassé » trompeuse.
@@ -82,10 +82,10 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --frozen
+      - run: uv sync --frozen # runtime seul (pas d'outils dev pour le scrape/promotion)
 
       - name: Migrations
-        run: uv run python -m pipeline.load.migrate
+        run: uv run --frozen python -m pipeline.load.migrate
 
       - name: Scrape des sources -> staging
         id: scrape
@@ -94,7 +94,7 @@ jobs:
           blocked=0
           for src in ethglobal devpost lablab; do
             echo "::group::scrape $src"
-            uv run python -m pipeline.scrapers.run --source "$src" --live --limit 200
+            uv run --frozen python -m pipeline.scrapers.run --source "$src" --live --limit 200
             [ "$?" = "3" ] && blocked=1
             echo "::endgroup::"
           done
@@ -104,7 +104,7 @@ jobs:
         id: validate
         run: |
           set +e
-          uv run python -m pipeline.load.validate --report validation_report.md
+          uv run --frozen python -m pipeline.load.validate --report validation_report.md
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Issue si rejet de validation ou blocage anti-bot
