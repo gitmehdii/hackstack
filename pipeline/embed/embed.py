@@ -60,16 +60,11 @@ def main() -> None:
             chunk = rows[start : start + args.batch]
             texts = [_text_for(r[1], r[2], r[3]) for r in chunk]
             # bge-m3 : embeddings normalisés -> distance cosine cohérente avec l'index.
-            vectors = model.encode(
-                texts, normalize_embeddings=True, show_progress_bar=False
-            )
+            vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
             with conn.cursor() as cur:
                 cur.executemany(
                     "UPDATE projects SET embedding = %s WHERE id = %s",
-                    [
-                        (vec.tolist(), row[0])
-                        for vec, row in zip(vectors, chunk, strict=True)
-                    ],
+                    [(vec.tolist(), row[0]) for vec, row in zip(vectors, chunk, strict=True)],
                 )
             conn.commit()
             done += len(chunk)

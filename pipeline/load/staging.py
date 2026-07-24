@@ -19,9 +19,7 @@ _PROJECT_COLUMNS = (
 )
 
 
-def open_run(
-    conn: psycopg.Connection, *, source: str | None, kind: str, n_scraped: int
-) -> int:
+def open_run(conn: psycopg.Connection, *, source: str | None, kind: str, n_scraped: int) -> int:
     """Crée une ligne scrape_runs 'running' et renvoie son id."""
     with conn.cursor() as cur:
         cur.execute(

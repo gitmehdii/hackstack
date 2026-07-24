@@ -50,9 +50,7 @@ def main() -> None:
             sql = path.read_text(encoding="utf-8")
             with conn.cursor() as cur:
                 cur.execute(sql)
-                cur.execute(
-                    "INSERT INTO schema_migrations (version) VALUES (%s)", (version,)
-                )
+                cur.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (version,))
             conn.commit()
             print(f"+ {version} appliqué")
 

@@ -65,9 +65,7 @@ def _import_hackathons_db(
         r[0]: (r[1], r[2])
         for r in con.execute("SELECT id, name, slug FROM technologies").fetchall()
     }
-    for proj_id, tech_id in con.execute(
-        "SELECT project_id, tech_id FROM project_tech"
-    ).fetchall():
+    for proj_id, tech_id in con.execute("SELECT project_id, tech_id FROM project_tech").fetchall():
         name_slug = tech_names.get(tech_id)
         if name_slug:
             tech_by_project.setdefault(proj_id, []).append(name_slug)
@@ -131,13 +129,9 @@ def _import_hackathons_db(
                 scraped_at=scraped_at,
             )
         )
-        hackathons[(hk_source, hk_slug)] = Hackathon(
-            source=hk_source, slug=hk_slug, name=hk_name
-        )
+        hackathons[(hk_source, hk_slug)] = Hackathon(source=hk_source, slug=hk_slug, name=hk_name)
         for tname, tslug in tech_by_project.get(sqlite_id, []):
-            raw_techs.append(
-                RawTech(project_id=pid, source=src, tech_name=tname, tech_slug=tslug)
-            )
+            raw_techs.append(RawTech(project_id=pid, source=src, tech_name=tname, tech_slug=tslug))
 
     con.close()
     return projects, list(hackathons.values()), raw_techs
