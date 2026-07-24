@@ -11,44 +11,28 @@ Usage:
 from __future__ import annotations
 
 import os
-import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
 from pipeline.load.db import connect
+from pipeline.load.staging import finish_run, open_run, write_staging_batch
+from pipeline.normalize.parse_helpers import (
+    LABLAB_MAP,
+)
+from pipeline.normalize.parse_helpers import (
+    clean as _clean,
+)
+from pipeline.normalize.parse_helpers import (
+    parse_place as _parse_place,
+)
 from pipeline.normalize.schema import Hackathon, Project, RawTech, Source, project_id
-
-PLACE_RE = re.compile(r"(\d+)\s*(?:st|nd|rd|th)\s+place", re.IGNORECASE)
-
-# lablab : event_position -> (placement, is_winner)
-LABLAB_MAP: dict[str, tuple[int | None, bool]] = {
-    "WINNERS": (1, True),
-    "TOP_2": (2, True),
-    "TOP_3": (3, True),
-    "FINALISTS": (None, False),
-    "OTHER": (None, False),
-}
 
 
 def _file_mtime(path: str) -> datetime:
     ts = Path(path).stat().st_mtime
     return datetime.fromtimestamp(ts, tz=UTC)
-
-
-def _clean(value: str | None) -> str | None:
-    if value is None:
-        return None
-    value = value.strip()
-    return value or None
-
-
-def _parse_place(text: str | None) -> int | None:
-    if not text:
-        return None
-    m = PLACE_RE.search(text)
-    return int(m.group(1)) if m else None
 
 
 def _load_events(con: sqlite3.Connection) -> dict[int, tuple[str, str, str]]:
@@ -286,79 +270,14 @@ def main() -> None:
     )
 
     with connect() as conn:
+        run_id = open_run(conn, source=None, kind="import", n_scraped=len(projects))
+        # raw_project_tech est global (pas de scrape_run) : l'import remplace le lot
+        # avant l'écriture (les scrapers, eux, insèrent en ON CONFLICT DO NOTHING).
         with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO scrape_runs (source, kind, status, n_scraped) "
-                "VALUES (NULL, 'import', 'running', %s) RETURNING id",
-                (len(projects),),
-            )
-            row = cur.fetchone()
-            assert row is not None
-            run_id = row[0]
-
-            cur.executemany(
-                "INSERT INTO hackathons_staging "
-                "(scrape_run_id, source, slug, name, hackathon_date, url) "
-                "VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                [
-                    (run_id, h.source, h.slug, h.name, h.hackathon_date, h.url)
-                    for h in hackathons
-                ],
-            )
-
-            cur.executemany(
-                "INSERT INTO projects_staging ("
-                "scrape_run_id, id, source, source_url, hackathon_slug, hackathon_name, "
-                "hackathon_date, theme_tags, title, description, short_description, "
-                "placement, raw_placement, is_winner, prize_track, tech_stack, "
-                "stack_source, team_size, team_name, repo_url, demo_url, scraped_at"
-                ") VALUES ("
-                "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                "%s, %s, %s, %s, %s, %s)",
-                [
-                    (
-                        run_id,
-                        p.id,
-                        p.source,
-                        p.source_url,
-                        p.hackathon_slug,
-                        p.hackathon_name,
-                        p.hackathon_date,
-                        p.theme_tags,
-                        p.title,
-                        p.description,
-                        p.short_description,
-                        p.placement,
-                        p.raw_placement,
-                        p.is_winner,
-                        p.prize_track,
-                        p.tech_stack,
-                        p.stack_source,
-                        p.team_size,
-                        p.team_name,
-                        p.repo_url,
-                        p.demo_url,
-                        p.scraped_at,
-                    )
-                    for p in projects
-                ],
-            )
-
-            # raw_project_tech est global (pas de scrape_run) : on remplace le lot.
             cur.execute("DELETE FROM raw_project_tech")
-            cur.executemany(
-                "INSERT INTO raw_project_tech (project_id, source, tech_name, tech_slug) "
-                "VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                [
-                    (t.project_id, t.source, t.tech_name, t.tech_slug)
-                    for t in unique_techs
-                ],
-            )
-
-            cur.execute(
-                "UPDATE scrape_runs SET status='validated', finished_at=now() WHERE id=%s",
-                (run_id,),
-            )
+        write_staging_batch(conn, run_id, projects, hackathons, unique_techs)
+        # Import initial = bootstrap sans baseline de validation (cf. STATE.md Étape 1).
+        finish_run(conn, run_id, status="validated")
         conn.commit()
 
     print(f"Import en staging terminé (scrape_run #{run_id}).")

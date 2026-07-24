@@ -351,3 +351,92 @@ pour ne pas frôler l'interdit « chiffre biaisé présenté comme conclusion »
   non-gagnants variés) arrivera au rescrape. Notes de biais en place partout.
 - **Backfill embeddings toujours incomplet** (hérité Ét. 3) — sans impact sur les Trends
   (agrégats SQL, pas de vecteur).
+
+---
+
+## Étape 6 — Scraping (acquisition) ✅
+
+**Statut : terminée.** Branche `etape-6-scraping` (depuis `main`). Cœur data-engineering
+écrit de zéro : aucune collecte n'existait (le corpus venait d'un import SQLite unique).
+
+### Fait
+
+- **Socle poli** (`pipeline/scrapers/base.py`) — `BaseScraper` (client httpx injectable),
+  rate limit **1 req/s par domaine**, respect de `robots.txt`
+  (`urllib.robotparser`, parsé depuis le même client), retry borné sur transitoire (5xx/
+  timeout, jamais sur 403), **détection anti-bot** (`detect_block` : 403/503 + marqueurs
+  Cloudflare/captcha → `ScraperBlocked`, jamais de contournement), cache HTTP disque
+  optionnel (`--cache`). Généralise le patron `_throttle`/`GitHubBlocked` de `github_stack`.
+- **Gagnants ET non-gagnants** (décision d'Étape 6, cf. PROJECT.md) — par défaut les scrapers
+  captent **tous** les projets des événements traversés, `is_winner` les distingue ;
+  `--winners-only` restreint aux gagnants. lablab : feed complet (non-filtré) par défaut,
+  `filter=winners` en winners-only. devpost : toutes les entrées de gallery. ethglobal :
+  showcase complet (`has_prizes` → `is_winner`). Débiaise `/trends` (analyses 3 & 5).
+- **Trois scrapers**, parsing **pur** (fonctions testables sans réseau) séparé de la couche
+  HTTP :
+  - **ethglobal** (`ethglobal.py`) — port Python de l'extraction RSC Next.js
+    (`self.__next_f.push`), listing `/showcase` → page projet. Extrait **`event.startTime` →
+    `hackathon_date`**, prix → placement/prize_track/is_winner, `sourceCodeUrl` → repo_url,
+    description (champ inline **ou** chunk texte `NN:T…` quand la valeur est une référence RSC
+    `$28`). Unicode RSC (`\uXXXX`) dé-échappé.
+  - **devpost** (`devpost.py`) — 3 phases : API liste (dates de hackathon best-effort) →
+    gallery HTML (ruban `img.winner` dans `aside.entry-badge`, selectolax, membres dédupés) →
+    page `/software/{slug}` pour la **description intégrale + repo GitHub + démo + « Built
+    With »** (→ `raw_project_tech`). Comble la dette devpost (avant : tagline seule, ni repo
+    ni tech).
+  - **lablab** (`lablab.py`) — **live via l'API JSON publique** `/api/v4/submissions`
+    (sondée : 200, paginée par cursor, permise par `robots.txt` ; seule la surface HTML est
+    Cloudflare). `parse_submissions` pur + `scrape()` live + `ingest_archive(winners.json)`
+    en repli hors ligne. La détection anti-bot reste le garde-fou si l'API se ferme un jour.
+- **Runner** (`run.py`) — écrit **uniquement en staging** ; run réussi → statut `scraped`,
+  blocage → `blocked` + notes, autre erreur → `failed`. Chemin d'écriture staging factorisé
+  dans `pipeline/load/staging.py` (`open_run`/`write_staging_batch`/`finish_run`), **réutilisé
+  aussi par `import_sqlite.py`** (fin de la duplication du gros INSERT). Helpers de parsing
+  (`LABLAB_MAP`, `parse_place`, `clean`) sortis dans `pipeline/normalize/parse_helpers.py`.
+- **Migration `0011`** — deux statuts de run : `scraped` (fini, non validé — l'enum n'avait
+  aucun état terminal non-validé) et `blocked` (anti-bot, **distinct de `failed`** pour que la
+  CI de l'Étape 7 traite les deux différemment).
+- **Tests de contrat** (`pipeline/contracts/`) — fixtures **réelles** figées (devpost/ethglobal
+  captées au smoke-scrape ; lablab = sous-ensemble de `winners.json` + challenge Cloudflare
+  synthétique). `test_base` (rate limit, robots disallow, détection anti-bot, cache) + un test
+  par source (invariants : champs requis, winner/placement, **date parsée** pour ethglobal,
+  tech mappée pour lablab, description résolue). **+24 tests (73 au total)**, sans réseau.
+- **Qualité & vérif** — `ruff` + `mypy --strict` clean, **73 tests** verts (sans réseau).
+  Migration appliquée. **Smoke-scrape live poli** (1 req/s, robots respecté) sur les **trois**
+  sources, mode par défaut (gagnants + non-gagnants), 15/source : le mix `is_winner` est bien
+  présent (devpost 3 gagnants / 12 non ; ethglobal idem ; lablab 15 non-gagnants sur le feed
+  complet), `hackathon_date` non nul (ethglobal + devpost), **repo devpost capté** (5/15) et
+  **« Built With » → 90 tags bruts** (14/15). `projects` **inchangée** (21 027). Chemin
+  `blocked` vérifié (challenge Cloudflare mocké → statut `blocked`, 0 ligne stagée, 0 `failed`).
+
+### Décisions prises
+
+| Sujet | Décision | Raison |
+|---|---|---|
+| lablab | **Live via API JSON publique** (sondée), archive en repli | L'hypothèse « Cloudflare bloque » (héritée du JS) était fausse pour l'API : 200 sans challenge, robots OK. Le cookie de l'ancien scraper servait l'API *authentifiée*, plus nécessaire |
+| Blocage anti-bot | `status='blocked'` + notes, **stop**, aucun effet externe | L'ouverture d'issue est un effet de bord imprévisible en local ; câblée à la CI (Étape 7). `blocked` ≠ `failed` |
+| Statut d'un scrape réussi | Nouveau `scraped` (fini, non validé) | L'enum n'avait pas d'état terminal avant validation ; poser `validated` mentirait |
+| Fixtures | **Vraies** captures (devpost/ethglobal) + winners.json (lablab) | Tester le parsing sur du HTML/RSC réel, pas sur des maquettes ; démarre le compteur mainteneur |
+| Description devpost | Fetch de la page `/software/{slug}` | Comble la dette « short_description seulement » ; la fraîcheur profite aux embeddings futurs |
+| Gagnants + non-gagnants | Capturer les deux par défaut, `is_winner` distingue, `--winners-only` en opt-in | Dataset = actif : filtrable a posteriori, jamais récupérable après coup ; débiaise `/trends`. Gagnants = vue par défaut, positionnement PROJECT.md préservé |
+| Champs devpost | Capter repo + démo + « Built With » (page déjà chargée) | Données à fort rendement, gratuites (même page) ; `raw_project_tech` alimenté (signal tech fiable) |
+| tech scrapée (lablab/devpost) | En `raw_project_tech` (`stack_source` reste `none`) | Cohérent avec l'import Ét. 1 ; la normalisation `tech_stack` est le job de l'Étape 4 |
+
+### En suspens / dette connue
+
+- **`hackathon_date` backfillé au fil du scrape, pas encore promu** — les dates existent en
+  staging (ethglobal sûr, devpost best-effort) mais n'atteindront `projects` qu'après la
+  validation/promotion (Étape 7). C'est à ce moment que les analyses 1 & 2 de `/trends`
+  s'allumeront.
+- **Dates devpost best-effort** — parsées d'un libellé humain (`submission_period_dates`,
+  ex. « Apr 05 - 06, 2024 ») : date de fin, jour+dernier mois+année. Fiable sur les formats
+  vus, `None` sinon. ethglobal reste la source de dates fiable (ISO `startTime`).
+- **`team_size` toujours absent** — aucune source scrapée ne fournit la composition d'équipe
+  (devpost donne des noms de membres → `team_name`, pas un décompte fiable). L'analyse 4 de
+  `/trends` reste `unavailable_in_corpus`.
+- **Pas de validation ni de récurrence** — promotion des scrapes, seuils
+  `thresholds.yaml`, workflow hebdo GitHub Actions et ouverture d'issue réelle sur blocage :
+  tout ça est l'Étape 7. Ici, un scrape s'arrête à `staging`.
+- **Robustesse des sélecteurs = surface du mainteneur (Étape 9)** — les tests de contrat sur
+  fixtures figées sont le Niveau 1 (détection). Ils doivent tourner ~1 mois avant d'envisager
+  les niveaux diagnostic/correction.

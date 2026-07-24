@@ -1,0 +1,257 @@
+{
+ "hackathons": [
+  {
+   "id": 30435,
+   "title": "Web Champ",
+   "displayed_location": {
+    "icon": "globe",
+    "location": "Online"
+   },
+   "open_state": "ended",
+   "thumbnail_url": "//d112y698adiu2z.cloudfront.net/photos/production/challenge_thumbnails/004/776/618/datas/medium_square.png",
+   "analytics_identifier": "Web Champ (30435)",
+   "url": "https://web-champ.devpost.com/",
+   "time_left_to_submission": "Ended",
+   "submission_period_dates": "Jun 16 - Jul 16, 2026",
+   "themes": [
+    {
+     "id": 18,
+     "name": "Design"
+    },
+    {
+     "id": 20,
+     "name": "E-commerce/Retail"
+    },
+    {
+     "id": 25,
+     "name": "Web"
+    }
+   ],
+   "prize_amount": "$<span data-currency-value>0</span>",
+   "prizes_counts": {
+    "cash": 0,
+    "other": 3
+   },
+   "registrations_count": 241,
+   "featured": false,
+   "organization_name": "The Fusion",
+   "winners_announced": false,
+   "submission_gallery_url": "https://web-champ.devpost.com/project-gallery",
+   "start_a_submission_url": "https://web-champ.devpost.com/challenges/start_a_submission",
+   "invite_only": false,
+   "eligibility_requirement_invite_only_description": null,
+   "managed_by_devpost_badge": false
+  },
+  {
+   "id": 20677,
+   "title": "Central Hacks",
+   "displayed_location": {
+    "icon": "map-marker-alt",
+    "location": "Central Michigan University Pearce Hall"
+   },
+   "open_state": "ended",
+   "thumbnail_url": "//d112y698adiu2z.cloudfront.net/photos/production/challenge_thumbnails/004/870/109/datas/medium_square.png",
+   "analytics_identifier": "Central Hacks (20677)",
+   "url": "https://cmu-hackathon.devpost.com/",
+   "time_left_to_submission": "Ended",
+   "submission_period_dates": "Apr 05 - 06, 2024",
+   "themes": [
+    {
+     "id": 23,
+     "name": "Beginner Friendly"
+    },
+    {
+     "id": 22,
+     "name": "Open Ended"
+    }
+   ],
+   "prize_amount": "$<span data-currency-value>1,500</span>",
+   "prizes_counts": {
+    "cash": 4,
+    "other": 0
+   },
+   "registrations_count": 46,
+   "featured": false,
+   "organization_name": "Central Michigan University",
+   "winners_announced": true,
+   "submission_gallery_url": "https://cmu-hackathon.devpost.com/project-gallery",
+   "start_a_submission_url": "https://cmu-hackathon.devpost.com/challenges/start_a_submission",
+   "invite_only": true,
+   "eligibility_requirement_invite_only_description": "Central Michigan University students only",
+   "managed_by_devpost_badge": false
+  },
+  {
+   "id": 30223,
+   "title": "OpenAI Build Week",
+   "displayed_location": {
+    "icon": "globe",
+    "location": "Online"
+   },
+   "open_state": "ended",
+   "thumbnail_url": "//d112y698adiu2z.cloudfront.net/photos/production/challenge_thumbnails/004/872/093/datas/medium_square.png",
+   "analytics_identifier": "OpenAI Build Week (30223)",
+   "url": "https://openai.devpost.com/",
+   "time_left_to_submission": "Ended",
+   "submission_period_dates": "Jul 13 - 21, 2026",
+   "themes": [
+    {
+     "id": 6,
+     "name": "Machine Learning/AI"
+    },
+    {
+     "id": 2,
+     "name": "DevOps"
+    },
+    {
+     "id": 11,
+     "name": "Productivity"
+    }
+   ],
+   "prize_amount": "$<span data-currency-value>100,000</span>",
+   "prizes_counts": {
+    "cash": 1,
+    "other": 0
+   },
+   "registrations_count": 46811,
+   "featured": false,
+   "organization_name": "OpenAI",
+   "winners_announced": false,
+   "submission_gallery_url": "https://openai.devpost.com/project-gallery",
+   "start_a_submission_url": "https://openai.devpost.com/challenges/start_a_submission",
+   "invite_only": false,
+   "eligibility_requirement_invite_only_description": null,
+   "managed_by_devpost_badge": true
+  },
+  {
+   "id": 29812,
+   "title": "H0: Hack the Zero Stack with Vercel v0 and AWS Databases",
+   "displayed_location": {
+    "icon": "globe",
+    "location": "Online"
+   },
+   "open_state": "ended",
+   "thumbnail_url": "//d112y698adiu2z.cloudfront.net/photos/production/challenge_thumbnails/004/686/189/datas/medium_square.png",
+   "analytics_identifier": "H0: Hack the Zero Stack with Vercel v0 and AWS Databases (29812)",
+   "url": "https://h01.devpost.com/",
+   "time_left_to_submission": "Ended",
+   "submission_period_dates": "May 27 - Jun 29, 2026",
+   "themes": [
+    {
+     "id": 28,
+     "name": "Databases"
+    },
+    {
+     "id": 22,
+     "name": "Open Ended"
+    },
+    {
+     "id": 25,
+     "name": "Web"
+    }
+   ],
+   "prize_amount": "$<span data-currency-value>80,000</span>",
+   "prizes_counts": {
+    "cash": 16,
+    "other": 0
+   },
+   "registrations_count": 9748,
+   "featured": false,
+   "organization_name": "Amazon",
+   "winners_announced": false,
+   "submission_gallery_url": "https://h01.devpost.com/project-gallery",
+   "start_a_submission_url": "https://h01.devpost.com/challenges/start_a_submission",
+   "invite_only": false,
+   "eligibility_requirement_invite_only_description": null,
+   "managed_by_devpost_badge": true
+  },
+  {
+   "id": 29966,
+   "title": "Global AI Hackathon Series with Qwen Cloud ",
+   "displayed_location": {
+    "icon": "globe",
+    "location": "Online"
+   },
+   "open_state": "ended",
+   "thumbnail_url": "//d112y698adiu2z.cloudfront.net/photos/production/challenge_thumbnails/004/706/870/datas/medium_square.png",
+   "analytics_identifier": "Global AI Hackathon Series with Qwen Cloud  (29966)",
+   "url": "https://qwencloud-hackathon.devpost.com/",
+   "time_left_to_submission": "Ended",
+   "submission_period_dates": "May 26 - Jul 20, 2026",
+   "themes": [
+    {
+     "id": 6,
+     "name": "Machine Learning/AI"
+    },
+    {
+     "id": 18,
+     "name": "Design"
+    },
+    {
+     "id": 11,
+     "name": "Productivity"
+    }
+   ],
+   "prize_amount": "$<span data-currency-value>45,000</span>",
+   "prizes_counts": {
+    "cash": 7,
+    "other": 0
+   },
+   "registrations_count": 8484,
+   "featured": false,
+   "organization_name": "Alibaba Cloud",
+   "winners_announced": false,
+   "submission_gallery_url": "https://qwencloud-hackathon.devpost.com/project-gallery",
+   "start_a_submission_url": "https://qwencloud-hackathon.devpost.com/challenges/start_a_submission",
+   "invite_only": false,
+   "eligibility_requirement_invite_only_description": null,
+   "managed_by_devpost_badge": true
+  },
+  {
+   "id": 29843,
+   "title": "Slack Agent Builder Challenge",
+   "displayed_location": {
+    "icon": "globe",
+    "location": "Online"
+   },
+   "open_state": "ended",
+   "thumbnail_url": "//d112y698adiu2z.cloudfront.net/photos/production/challenge_thumbnails/004/685/418/datas/medium_square.png",
+   "analytics_identifier": "Slack Agent Builder Challenge (29843)",
+   "url": "https://slackhack.devpost.com/",
+   "time_left_to_submission": "Ended",
+   "submission_period_dates": "May 20 - Jul 13, 2026",
+   "themes": [
+    {
+     "id": 23,
+     "name": "Beginner Friendly"
+    },
+    {
+     "id": 21,
+     "name": "Enterprise"
+    },
+    {
+     "id": 17,
+     "name": "Low/No Code"
+    }
+   ],
+   "prize_amount": "$<span data-currency-value>42,000</span>",
+   "prizes_counts": {
+    "cash": 9,
+    "other": 0
+   },
+   "registrations_count": 4439,
+   "featured": false,
+   "organization_name": "Salesforce",
+   "winners_announced": false,
+   "submission_gallery_url": "https://slackhack.devpost.com/project-gallery",
+   "start_a_submission_url": "https://slackhack.devpost.com/challenges/start_a_submission",
+   "invite_only": false,
+   "eligibility_requirement_invite_only_description": null,
+   "managed_by_devpost_badge": true
+  }
+ ],
+ "meta": {
+  "total_count": 13460,
+  "per_page": 40,
+  "fuzzy": false
+ }
+}

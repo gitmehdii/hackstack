@@ -1,0 +1,140 @@
+{
+  "submissions": [
+    {
+      "title": "Kraken Alpha Agent",
+      "slug": "kraken-alpha-agent",
+      "shortDescription": "Autonomous xStocks trading agent that ranks signals, backtests the hackathon window, exposes risk controls, and provides a read-only audit trail for Kraken judges.",
+      "description": "Kraken Alpha Agent is an autonomous trading agent built for the Kraken Trading Performance track.\n\nThe project focuses on xStocks strategy selection, risk-controlled execution, and transparent PnL reporting. The agent ranks xStocks candidates, runs a reproducible hackathon-window backtest, applies strict guardrails, and exposes the result through a public Vercel dashboard.\n\nThe core demo shows the full workflow: signal ranking, dry-run execution, risk checks, backtest performance, and judge auditability. During the audited 13-19 May 2026 hackathon window, the backtest shows +19.18 USD PnL across 10 trades, 80% win rate, and 0.06% max drawdown. A 30-day baseline shows +33.56 USD across 138 trades with 53% win rate.\n\nImportant transparency note: live xStocks execution was blocked at the Kraken venue/account level for the Cyprus EU account used in the hackathon. The project therefore reports xStocks PnL from reproducible backtests, not from live xStocks fills. A short crypto diagnostic session produced live fills outside the xStocks track, proving the engine, API key, IP setup, and execution pipeline work end-to-end.\n\nThe system defaults to dry-run mode and requires triple opt-in before any live order. It also enforces 1.0x leverage, no shorting, reduce-only exits for futures, and strict rejection handling for Kraken responses.\n\nThe goal is simple: make autonomous trading agents measurable, risk-aware, and auditable enough for judge verification.",
+      "eventPosition": "WINNERS",
+      "event": {
+        "name": "AI Agent Olympics Hackathon",
+        "slug": "milan-ai-week-hackathon"
+      },
+      "team": {
+        "name": "Kraken Alpha Agent",
+        "slug": "kraken-alpha-agent"
+      },
+      "techIn": [
+        {
+          "tech": {
+            "name": "Vercel",
+            "slug": "vercel"
+          }
+        },
+        {
+          "tech": {
+            "name": "VULTR",
+            "slug": "vultr"
+          }
+        },
+        {
+          "tech": {
+            "name": "Kraken cli",
+            "slug": "kraken-cli"
+          }
+        },
+        {
+          "tech": {
+            "name": "Kraken Ink",
+            "slug": "kraken-ink"
+          }
+        },
+        {
+          "tech": {
+            "name": "Kraken Websocket api",
+            "slug": "kraken-websocket-api"
+          }
+        }
+      ],
+      "videoLink": "https://storage.googleapis.com/lablab-video-submissions/dk0pq00fw88uufuvi1p1u928/raw/submission-video-x-dk0pq00fw88uufuvi1p1u928-q4w0lp0g3d83tepojmovre1y_ajo2bnh6swapitob8dqj9uau.mp4",
+      "demoPlatform": null
+    },
+    {
+      "title": "trading ai agent ",
+      "slug": "trading-ai-agent",
+      "shortDescription": "Autonomous AI that reasons beyond the news — 10 intelligence layers, real-time trading, fully transparent decisions. Built with Groq + Kraken. AI Agent Olympics · Milan AI Week 2026.",
+      "description": "Most trading bots do the obvious — NVIDIA earnings beat, buy NVIDIA. By the time they act, the edge is gone.\nThis agent thinks differently. It uses second-order reasoning — when NVIDIA beats earnings, it asks who else benefits? and trades ARM (chip architecture) and TSMC (manufacturer) before the crowd catches up.\nWhat it does:\n\nMonitors 6 live RSS news feeds continuously\nUses Groq LLaMA 3.3 70B to reason about market implications\nPasses every trade through 10 intelligence layers: sentiment scoring, confidence thresholds, volatility checks, position sizing, stop-loss, brokerage fee simulation, portfolio awareness, and more\nExecutes trades autonomously on Kraken xStocks\nLogs every decision with full reasoning — why it bought, why it skipped, what sentiment score triggered it\n\nTech Stack: Groq LLaMA 3.3 70B · Kraken xStocks · Yahoo Finance (live prices) · Flask + JS dashboard · Persistent JSON storage\nLive results at time of recording: Portfolio $10,058 · P&L +$58.84 after fees · 4 active positions (NVDA, ARM, AAPL, AMD)\nBuilt solo by Varun — AI Agent Olympics · Milan AI Week 2026\n🔗 github.com/AVarun3204/trading-agent",
+      "eventPosition": "TOP_2",
+      "event": {
+        "name": "AI Agent Olympics Hackathon",
+        "slug": "milan-ai-week-hackathon"
+      },
+      "team": {
+        "name": "Falcon",
+        "slug": "falcon"
+      },
+      "techIn": [
+        {
+          "tech": {
+            "name": "AI/ML API",
+            "slug": "aiml-api"
+          }
+        },
+        {
+          "tech": {
+            "name": "ElevenLabs",
+            "slug": "elevenlabs"
+          }
+        },
+        {
+          "tech": {
+            "name": "Kraken cli",
+            "slug": "kraken-cli"
+          }
+        },
+        {
+          "tech": {
+            "name": "Groq",
+            "slug": "groq"
+          }
+        }
+      ],
+      "videoLink": "https://storage.googleapis.com/lablab-video-submissions/dk0pq00fw88uufuvi1p1u928/raw/submission-video-x-dk0pq00fw88uufuvi1p1u928-i2jf9x1zpxmzy5xg6pxzy1ui_n0iks6tmww5ekix329onrpyn.mp4",
+      "demoPlatform": "OTHER"
+    },
+    {
+      "title": "StudioMI300 - cinematic reel from one prompt",
+      "slug": "studiomi300-cinematic-reel-from-one-prompt",
+      "shortDescription": "One prompt becomes a 30-second cinematic reel - planning, video, music, voice-over - end-to-end on a single AMD Instinct MI300X. Apache 2.0 / MIT all the way down. Qwen3.5-35B + FLUX.2 klein + Wan2.2-I2V + ACE-Step + Kokoro.",
+      "description": "StudioMI300 turns one English sentence into a 30-second cinematic reel, end-to-end, on a single AMD Instinct MI300X.\n\nThe pipeline runs eight stages sequentially on the same GPU: a Qwen3.5-35B Director Agent plans six shots with character portraits, music brief, and per-shot voice-over script; FLUX.2 [klein] 4B paints character master keyframes with reference editing for identity preservation; Wan2.2-I2V-A14B animates each shot using First-Last-Frame conditioning for cut:false continuation arcs; the same Qwen3.5-35B re-loads as a vision critic, scoring four sampled frames per clip on character_match / scene_match / composition / artifact_free axes, with structured failure labels (STYLIZED_AI_LOOK, CHARACTER_DRIFT, EXTRAS_INVADE_FRAME, CAMERA_IGNORED) that drive a re-render loop with bumped seeds; ACE-Step v1 generates the instrumental music; Kokoro-82M narrates per-shot voice-over in nine languages (Director picks the language to match the setting); ffmpeg concatenates and mixes the final mp4.\n\n192 GB HBM3 lets all four model architectures share the same card, loaded and unloaded between phases. ParaAttention FBCache (lossless 2x) and selective torch.compile on Wan2.2's transformer_2 give a cumulative 2.5x speedup vs unoptimised baseline. Every model is Apache 2.0 / MIT - outputs are commercially usable.\n\nThe pipeline ships as a Python CLI plus a FastAPI server that streams stage events (plan, masters, keyframes, clip rendering, critic verdicts, music, VO chunks, final mp4) over Server-Sent Events for live demos. Multi-GPU routing scaffolding is in place via STUDIOMI_GPU_* env vars.",
+      "eventPosition": "FINALISTS",
+      "event": {
+        "name": "AMD Developer Hackathon",
+        "slug": "amd-developer"
+      },
+      "team": {
+        "name": "StudioMI300",
+        "slug": "studiomi300"
+      },
+      "techIn": [
+        {
+          "tech": {
+            "name": "AMD ROCm",
+            "slug": "amd-rocm"
+          }
+        },
+        {
+          "tech": {
+            "name": "AMD Developer Cloud",
+            "slug": "amd-developer-cloud"
+          }
+        },
+        {
+          "tech": {
+            "name": "Qwen3-VL",
+            "slug": "qwen3-vl"
+          }
+        },
+        {
+          "tech": {
+            "name": "Qwen3",
+            "slug": "qwen3"
+          }
+        }
+      ],
+      "videoLink": "https://storage.googleapis.com/lablab-video-submissions/n3v922wai9khqi5gs2jctlap/raw/submission-video-x-n3v922wai9khqi5gs2jctlap-doeno1escwiplc1lbudwnu99_c0a58xz3ci79ov62e57wo7gy.mp4",
+      "demoPlatform": "OTHER"
+    }
+  ],
+  "nextCursor": null
+}

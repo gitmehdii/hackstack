@@ -18,11 +18,16 @@ et analyse de tendances. Voir [PROJECT.md](PROJECT.md) pour la vision complète.
 - [x] **Étape 3 — Recherche hybride** : `/search` (vecteur pgvector + full-text, fusion
       RRF) avec filtres, page `/search` client-side, « projets similaires » sur la page
       projet. Backfill des embeddings sur les 21k projets en cours. Cf. [STATE.md](STATE.md).
-- [ ] Étape 4 — Thèmes & tech stack
-- [ ] Étape 5 — Trends
-- [ ] Étape 6 — Pipeline de rescrape
-- [ ] Étape 7 — Dataset public
-- [ ] Étape 8 — Agent mainteneur
+- [x] **Étape 4 — Thèmes & tech stack** : taxonomies fermées, extraction GitHub + LLM
+      (ancrée dans le texte), pages `/theme/[slug]`. Cf. [STATE.md](STATE.md).
+- [x] **Étape 5 — Trends** : dashboard `/trends`, les 5 analyses (calculées là où la
+      donnée existe, états vides explicites ailleurs), test statistique. Cf. [STATE.md](STATE.md).
+- [x] **Étape 6 — Scraping (acquisition)** : classe de base polie, scrapers devpost /
+      ethglobal / lablab, tests de contrat sur fixtures figées. Écrit en staging ; la
+      promotion reste conditionnée à la validation (Étape 7). Cf. [STATE.md](STATE.md).
+- [ ] Étape 7 — Validation & automatisation
+- [ ] Étape 8 — Dataset public
+- [ ] Étape 9 — Agent mainteneur
 
 ## Prérequis
 
@@ -143,6 +148,53 @@ victoire **+ note de biais**, stacks dominantes, projets). Pages : `/themes` et
 > **Taux de victoire biaisé.** Il dépend du nombre de prix et des tracks sponsorisées, pas
 > seulement de la qualité (cf. PROJECT.md). Le chiffre est toujours affiché avec sa note
 > méthodologique ; la normalisation par prix arrive à l'Étape 5.
+
+## Scraping — acquisition (Étape 6)
+
+Le corpus initial vient d'un import SQLite unique ; l'Étape 6 ajoute la **collecte fraîche**.
+Un scrape écrit **uniquement en staging** (`projects_staging`) — la promotion vers `projects`
+reste conditionnée à la validation (Étape 7). Un run réussi laisse le run en statut
+`scraped` (fini, non validé).
+
+Socle commun ([`pipeline/scrapers/base.py`](pipeline/scrapers/base.py)) : rate limit **1 req/s
+par domaine**, respect de `robots.txt`, User-Agent identifiable pointant vers le repo, retry
+borné sur transitoire, cache HTTP local optionnel (`--cache`, dossier `.http_cache/`). Sur
+**blocage anti-bot** (Cloudflare/captcha/403 systématique), le scraper **s'arrête** — jamais
+de contournement — et marque le run `blocked` (distinct de `failed`) avec un rapport dans
+`scrape_runs.notes` ; l'ouverture d'issue GitHub est câblée à l'Étape 7 (CI).
+
+Par défaut, un scrape capte **tous** les projets des événements traversés (gagnants **et**
+non-gagnants) ; `is_winner` les distingue. `--winners-only` restreint aux gagnants. Garder les
+non-gagnants rend le dataset filtrable a posteriori et débiaise `/trends` (cf. PROJECT.md).
+
+```bash
+# Scrape poli des trois sources (réseau), borné, avec cache de dev
+python -m pipeline.scrapers.run --source ethglobal --live --limit 5 --cache
+python -m pipeline.scrapers.run --source devpost   --live --limit 5 --cache
+python -m pipeline.scrapers.run --source lablab    --live --limit 5 --cache
+
+# Gagnants uniquement (opt-in)
+python -m pipeline.scrapers.run --source devpost --live --winners-only
+
+# lablab peut aussi rejouer un export JSON de l'API hors ligne
+python -m pipeline.scrapers.run --source lablab --archive path/to/winners.json
+```
+
+> **lablab.** L'API JSON publique `/api/v4/submissions?filter=winners` est accessible
+> poliment (200, paginée par cursor) et permise par `robots.txt` — c'est ce que `--live`
+> utilise. Seule la surface **HTML** (`/apps/...`) est derrière Cloudflare ; on n'en a pas
+> besoin. Si l'API venait à être challengée, la détection anti-bot arrête le run (`blocked`),
+> jamais de contournement (pas de cookie `cf_clearance`, pas de fingerprint TLS).
+
+ETHGlobal expose `event.startTime` et l'API Devpost expose les dates de hackathon : les
+scrapers **backfillent `hackathon_date`** (la donnée que `/trends` attend depuis l'Étape 5).
+Devpost récupère aussi, sur la page `/software/{slug}`, la **description intégrale**, le
+**repo GitHub**, l'**URL de démo** et la liste **« Built With »** (→ `raw_project_tech`) —
+comblant la dette « devpost = short_description seulement, ni repo ni tech » du corpus importé.
+
+Les **tests de contrat** ([`pipeline/contracts/`](pipeline/contracts/)) tournent sur des
+fixtures figées, **sans réseau** (`pytest`), et vérifient les invariants de parsing de chaque
+source. Ils démarrent le compteur « un mois » exigé avant l'agent mainteneur (Étape 9).
 
 ## Le corpus importé
 
