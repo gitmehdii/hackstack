@@ -26,8 +26,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev
@@ -78,8 +78,8 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --frozen # runtime seul (pas d'outils dev pour le scrape/promotion)
