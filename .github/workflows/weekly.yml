@@ -1,0 +1,126 @@
+name: weekly
+
+# Récurrence hebdomadaire (Étape 7). Deux volets indépendants :
+#   1. contract-tests : rejoue les tests de contrat sur les fixtures FIGÉES (Niveau-1
+#      détection du futur agent mainteneur, Étape 9). Sans réseau ni secret. Une rupture
+#      = un scraper cassé -> issue GitHub automatique. Démarre le compteur « un mois ».
+#   2. live-scrape : scrape -> validate -> promote, mais UNIQUEMENT si le secret
+#      DATABASE_URL est configuré (base de prod). Sinon le job se saute proprement.
+#      Un rejet de validation ou un blocage anti-bot ouvre une issue (l'effet de bord
+#      « issue » vit ici, dans la CI, pas dans le Python — décision d'Étape 6).
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # tous les lundis 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Tests de contrat (fixtures figées)
+        run: uv run pytest pipeline/contracts -q | tee contract_output.txt
+      - name: Issue si rupture de contrat
+        if: failure()
+        run: |
+          title="[contrats] rupture détectée sur fixtures ($(date -u +%F))"
+          {
+            echo "Les tests de contrat hebdomadaires ont échoué : un scraper a probablement"
+            echo "cassé (changement de structure d'une source). Diagnostic manuel requis."
+            echo
+            echo '```'
+            tail -n 60 contract_output.txt 2>/dev/null || echo "(sortie indisponible)"
+            echo '```'
+          } > issue_body.md
+          gh issue create --title "$title" --body-file issue_body.md
+
+  # Les `if:` de job ne lisent pas `secrets` : on expose la présence du secret via un output.
+  check-db:
+    runs-on: ubuntu-latest
+    outputs:
+      has_db: ${{ steps.probe.outputs.has_db }}
+    steps:
+      - id: probe
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -n "$DATABASE_URL" ]; then
+            echo "has_db=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_db=false (scrape live sauté : configurez le secret DATABASE_URL)"
+            echo "has_db=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  live-scrape:
+    needs: check-db
+    if: needs.check-db.outputs.has_db == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+
+      - name: Migrations
+        run: uv run python -m pipeline.load.migrate
+
+      - name: Scrape des sources -> staging
+        id: scrape
+        run: |
+          set +e
+          blocked=0
+          for src in ethglobal devpost lablab; do
+            echo "::group::scrape $src"
+            uv run python -m pipeline.scrapers.run --source "$src" --live --limit 200
+            [ "$?" = "3" ] && blocked=1
+            echo "::endgroup::"
+          done
+          echo "blocked=$blocked" >> "$GITHUB_OUTPUT"
+
+      - name: Validation avant promotion
+        id: validate
+        run: |
+          set +e
+          uv run python -m pipeline.load.validate --report validation_report.md
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Issue si rejet de validation ou blocage anti-bot
+        if: steps.validate.outputs.code != '0' || steps.scrape.outputs.blocked == '1'
+        run: |
+          title="[pipeline] scrape hebdo : intervention requise ($(date -u +%F))"
+          {
+            echo "Le scrape hebdomadaire a rencontré un problème ; \`projects\` n'a pas été"
+            echo "mise à jour pour les runs concernés."
+            echo
+            if [ "${{ steps.scrape.outputs.blocked }}" = "1" ]; then
+              echo "- **Blocage anti-bot** sur au moins une source (run en statut \`blocked\`)."
+              echo "  Aucun contournement tenté (cf. PROJECT.md)."
+              echo
+            fi
+            if [ -f validation_report.md ]; then
+              echo "### Rapport de validation"
+              echo
+              cat validation_report.md
+            fi
+          } > issue_body.md
+          gh issue create --title "$title" --body-file issue_body.md
