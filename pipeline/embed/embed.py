@@ -55,16 +55,22 @@ def main() -> None:
         if total == 0:
             return
 
+        # Trié par longueur : un batch est paddé à la longueur de son plus long texte, et le
+        # corpus va de 50 à 3 700 caractères. Grouper les tailles proches supprime ce padding
+        # perdu. Les embeddings sont inchangés (chaque texte est encodé indépendamment, le
+        # padding est masqué) — seul l'ordre d'écriture change, et il n'a pas d'importance.
+        pairs = sorted(((_text_for(r[1], r[2], r[3]), r[0]) for r in rows), key=lambda p: len(p[0]))
+
         done = 0
         for start in range(0, total, args.batch):
-            chunk = rows[start : start + args.batch]
-            texts = [_text_for(r[1], r[2], r[3]) for r in chunk]
+            chunk = pairs[start : start + args.batch]
+            texts = [text for text, _ in chunk]
             # bge-m3 : embeddings normalisés -> distance cosine cohérente avec l'index.
             vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
             with conn.cursor() as cur:
                 cur.executemany(
                     "UPDATE projects SET embedding = %s WHERE id = %s",
-                    [(vec.tolist(), row[0]) for vec, row in zip(vectors, chunk, strict=True)],
+                    [(vec.tolist(), pid) for vec, (_, pid) in zip(vectors, chunk, strict=True)],
                 )
             conn.commit()
             done += len(chunk)

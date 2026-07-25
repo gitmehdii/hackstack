@@ -29,7 +29,9 @@ et analyse de tendances. Voir [PROJECT.md](PROJECT.md) pour la vision complète.
       baseline mobile/ancre, contrôles unilatéraux, seuils dans `thresholds.yaml`),
       statut `rejected` + rapport de diff, workflows GitHub Actions (CI + hebdo avec
       issue auto). Cf. [STATE.md](STATE.md).
-- [ ] Étape 8 — Dataset public
+- [x] **Étape 8 — Dataset public** : export parquet + carte de dataset prêts pour
+      HuggingFace, sans le texte intégral des descriptions (garde-fou testé). Écrit, **pas
+      encore publié** (attente des CGU + repo public). Cf. [STATE.md](STATE.md).
 - [ ] Étape 9 — Agent mainteneur
 
 ## Prérequis
@@ -234,6 +236,30 @@ push/PR (sans DB ni réseau). [`weekly.yml`](.github/workflows/weekly.yml) : heb
 ouvre une issue en cas de rupture ; (2) si le secret `DATABASE_URL` est configuré, enchaîne
 scrape → validation → promotion et ouvre une issue sur rejet ou blocage. Sans le secret, le
 volet scrape live se saute proprement.
+
+## Dataset public (Étape 8)
+
+L'export produit un dossier autonome, poussable tel quel sur HuggingFace :
+`projects.parquet` (métadonnées, dérivés, URLs sources), `hackathons.parquet`,
+`embeddings.parquet` (vecteurs bge-m3, fichier séparé pour rester téléchargeable à part) et
+un `README.md` de carte de dataset (licence, attribution, couverture chiffrée du run).
+
+```bash
+python -m pipeline.export.dataset --out dist/hackstack-dataset --version 2026q3
+
+# Itération rapide (sans les vecteurs, sur un échantillon)
+python -m pipeline.export.dataset --out dist/d --no-embeddings --limit 500
+```
+
+**Le texte intégral des descriptions ne sort jamais** (contrainte PROJECT.md) : le dataset
+publie `source_url` plus `has_description` / `description_chars`, assez pour juger la
+complétude et remonter à la source, pas pour rediffuser le contenu. Les embeddings, eux,
+sont publiés — ils donnent la recherche sémantique sans le texte. `check_columns` verrouille
+l'invariant et les tests l'exercent colonne par colonne ; le schéma parquet est **déclaré**,
+pas inféré, pour qu'une colonne vide sur un export (aujourd'hui `hackathon_date`) ne change
+pas de type d'une release à l'autre.
+
+Publication en attente : lecture des CGU des trois sources, et passage du repo en public.
 
 ## Le corpus importé
 
