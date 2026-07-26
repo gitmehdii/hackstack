@@ -95,7 +95,22 @@ dernières en ISR (`revalidate` 24 h, génération à la demande), avec métadon
 Recherche **hybride** : le bras vectoriel (pgvector `<=>`, index HNSW) et le bras
 full-text (`websearch_to_tsquery` sur `fts`, index GIN) sont fusionnés par **Reciprocal
 Rank Fusion** dans une seule requête SQL. La requête texte est vectorisée à la volée par
-bge-m3 (même modèle que les embeddings), chargé à la demande dans le process API.
+bge-m3 — **le même modèle que les embeddings stockés**, contrainte dure : en changer
+imposerait de ré-encoder les 21k projets.
+
+Deux backends d'encodage, via `EMBED_BACKEND` :
+
+| | `local` (défaut) | `remote` |
+|---|---|---|
+| Modèle | chargé en mémoire, ~2 Go | inférence HuggingFace, aucun poids |
+| RSS de l'API | ~2 Go | **~80 Mo** |
+| Dépendances | torch + sentence-transformers | un POST HTTP |
+| Requiert | rien | `HF_TOKEN` |
+
+Les deux produisent le **même vecteur** (vérifié : cosinus = 1.0 — l'endpoint HF renvoie du
+bge-m3 déjà normalisé). `remote` existe pour tenir dans un hébergement sans état, où 2 Go de
+poids ne rentrent pas ; `local` reste le défaut de dev, pour ne pas faire dépendre les tests
+d'un token et du réseau.
 
 ```bash
 # nécessite l'API lancée + des embeddings générés (python -m pipeline.embed.embed)
@@ -113,10 +128,11 @@ privée. Section « projets similaires » sur chaque page projet.
 > Le bras vectoriel se dégrade proprement en full-text seul quand un projet n'a pas encore
 > d'embedding : la recherche reste utilisable pendant le backfill des 21k embeddings.
 
-**Déploiement** (cible PROJECT.md) : front sur Vercel (`web/`, variables `API_URL` +
-`SITE_URL`, `API_URL` pointant vers l'API publique), API sur un VPS (`DATABASE_URL` +
-`API_CORS_ORIGINS` = domaine du front), base sur Supabase. Sitemap complet par projet
-reporté à l'Étape 3 (nécessite un endpoint de listing).
+**Déploiement** : front sur Vercel (`web/`, variables `API_URL` + `SITE_URL`), base sur
+Supabase, API en fonction serverless Vercel avec `EMBED_BACKEND=remote` (`DATABASE_URL` +
+`API_CORS_ORIGINS` = domaine du front). Le VPS que visait PROJECT.md n'est plus nécessaire :
+il ne l'était qu'à cause des 2 Go de bge-m3 dans le process API. Sitemap complet par projet
+reporté (nécessite un endpoint de listing).
 
 ## Thèmes et tech stack (Étape 4)
 

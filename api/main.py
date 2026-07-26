@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.config import cors_origins
 from api.db import make_pool
 from api.routers import hackathons, projects, search, stats, themes, trends
+from api.search_encoder import aclose as close_encoder
 
 
 @asynccontextmanager
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await close_encoder()
         await pool.close()
 
 
