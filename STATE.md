@@ -655,13 +655,27 @@ tout en tier gratuit. Réserve mesurée : le quota d'inférence gratuit est de �
 mois », dont je ne sais pas traduire l'unité en nombre de recherches — à surveiller en vrai. Si
 le quota casse, `/search` retombe sur le full-text seul, chemin déjà en place.
 
-**Contrainte de taille à régler avant la migration.** La base locale pèse **274 Mo à 49 %
-d'embeddings**, dont 100 Mo pour le seul index HNSW ; à 100 % je projette ~420 Mo. Le tier
-gratuit Supabase plafonne à **500 Mo** (et met les projets en pause après 7 jours
-d'inactivité). Ça rentre, sans marge pour les scrapes suivants. Correctif retenu, à appliquer
-**après** la fin du backfill (un `ALTER TYPE` prend un verrou exclusif sur la table) :
-`vector(1024)` → **`halfvec(1024)`**, qui divise par deux la colonne *et* l'index (~280 Mo),
-pour une perte de rappel négligeable.
+**Taille de la base : ça rentre, `halfvec` abandonné (mesuré le 2026-07-26).** Une première
+estimation faite à 49 % d'embeddings projetait ~420 Mo à 100 %, contre un plafond gratuit
+Supabase de **500 Mo** — d'où un projet de migration `vector(1024)` → `halfvec(1024)`. La
+mesure réelle l'a invalidé :
+
+| Mesure à 88 % d'embeddings | |
+|---|---|
+| base complète | 348 Mo |
+| table `projects` (avec index) | 308 Mo, dont 144 Mo d'index HNSW |
+| tables `*_staging` | 37 Mo — **inutiles en prod**, elles ne partent pas sur Supabase |
+
+Projection à 100 % hors staging : **~340 Mo, soit ~160 Mo de marge.** Et le coût de `halfvec`
+était sous-estimé : `api/queries/search.py` caste explicitement en `::vector`, opérateur que
+pgvector ne définit pas entre `halfvec` et `vector` — la migration casserait `/search` jusqu'à
+ce que les deux requêtes vectorielles soient reprises, plus reconstruction de l'index et
+nouvelle vérification du rappel.
+
+**Décision : pas de migration.** Seuil de déclenchement si la question revient (après quelques
+scrapes accumulés) : base essentielle > ~430 Mo. À ce moment-là, migrer la colonne *et* les
+deux casts, et mesurer le rappel avant/après. Rappel : le tier gratuit met aussi les projets en
+pause après 7 jours d'inactivité.
 
 Côté comptes : l'org Supabase « MDI's org » est **pleine** (2 projets sur un plan gratuit qui
 en autorise 2 : `gitmehdii's Project` actif, `readme-so-v2` en pause). Le nouveau projet ira
