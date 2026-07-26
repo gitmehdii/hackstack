@@ -16,6 +16,11 @@ import os
 
 from pipeline.load.db import connect
 
+# Colonnes de `projects` qui composent le texte encodé, dans l'ordre de concaténation.
+# Source de vérité partagée : la promotion (pipeline/load/promote.py) s'en sert pour
+# invalider l'embedding quand l'une d'elles change.
+EMBEDDED_TEXT_COLS = ("title", "short_description", "description")
+
 
 def _text_for(title: str, short: str | None, desc: str | None) -> str:
     parts = [title]
@@ -42,7 +47,7 @@ def main() -> None:
     with connect() as conn:
         with conn.cursor() as cur:
             sql = (
-                "SELECT id, title, short_description, description "
+                f"SELECT id, {', '.join(EMBEDDED_TEXT_COLS)} "
                 "FROM projects WHERE embedding IS NULL ORDER BY id"
             )
             if args.limit:
