@@ -128,11 +128,35 @@ def _projects_sql() -> str:
     return f"SELECT {cols}, {derived} FROM projects ORDER BY id"
 
 
-def _fetch(conn: Any, sql: str, schema: dict[str, Any], limit: int | None) -> pl.DataFrame:
+def _embeddings_query(
+    projects: pl.DataFrame, limit: int | None
+) -> tuple[str, tuple[Any, ...] | None]:
+    """Vecteurs des projets réellement exportés.
+
+    Un `LIMIT` indépendant serait faux : cette requête ne filtre pas comme celle des
+    projets (`WHERE embedding IS NOT NULL`), donc les deux `LIMIT` retiendraient des ids
+    différents. Mesuré sur la base : parmi les 2 000 premiers ids, 38 n'ont pas de vecteur
+    — soit 38 lignes de `embeddings.parquet` absentes de `projects.parquet`. Sans `--limit`
+    la question ne se pose pas (tous les projets sortent), et on évite alors de passer un
+    tableau de 21 k ids au serveur.
+    """
+    sql = "SELECT id, embedding::real[] AS embedding FROM projects WHERE embedding IS NOT NULL"
+    if limit is None:
+        return f"{sql} ORDER BY id", None
+    return f"{sql} AND id = ANY(%s) ORDER BY id", (list(projects["id"]),)
+
+
+def _fetch(
+    conn: Any,
+    sql: str,
+    params: tuple[Any, ...] | None,
+    schema: dict[str, Any],
+    limit: int | None = None,
+) -> pl.DataFrame:
     if limit is not None:
         sql += f" LIMIT {int(limit)}"
     with conn.cursor() as cur:
-        cur.execute(sql)
+        cur.execute(sql, params)
         names = [d.name for d in cur.description or []]
         rows = cur.fetchall()
     if names != list(schema):
@@ -229,20 +253,14 @@ def export(out_dir: Path, with_embeddings: bool, version: str, limit: int | None
     out_dir.mkdir(parents=True, exist_ok=True)
 
     with connect() as conn:
-        projects = _fetch(conn, _projects_sql(), PROJECT_SCHEMA, limit)
+        projects = _fetch(conn, _projects_sql(), None, PROJECT_SCHEMA, limit)
         hackathons_sql = (
             f"SELECT {', '.join(HACKATHON_COLUMNS)} FROM hackathons ORDER BY source, slug"
         )
-        hackathons = _fetch(conn, hackathons_sql, HACKATHON_SCHEMA, None)
+        hackathons = _fetch(conn, hackathons_sql, None, HACKATHON_SCHEMA)
         embeddings = pl.DataFrame(schema=EMBEDDING_SCHEMA)
         if with_embeddings:
-            embeddings = _fetch(
-                conn,
-                "SELECT id, embedding::real[] AS embedding FROM projects "
-                "WHERE embedding IS NOT NULL ORDER BY id",
-                EMBEDDING_SCHEMA,
-                limit,
-            )
+            embeddings = _fetch(conn, *_embeddings_query(projects, limit), EMBEDDING_SCHEMA)
 
     check_columns(tuple(projects.columns))
 

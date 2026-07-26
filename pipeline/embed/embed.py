@@ -45,7 +45,9 @@ def main() -> None:
                 "SELECT id, title, short_description, description "
                 "FROM projects WHERE embedding IS NULL ORDER BY id"
             )
-            if args.limit:
+            # `is not None` et pas la simple vérité : `--limit 0` doit encoder zéro ligne,
+            # pas lancer le backfill complet par accident.
+            if args.limit is not None:
                 sql += f" LIMIT {int(args.limit)}"
             cur.execute(sql)
             rows = cur.fetchall()
