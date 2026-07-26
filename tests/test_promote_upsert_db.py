@@ -23,6 +23,7 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 
+from pipeline.embed.embed import _UPDATE_SQL
 from pipeline.load.promote import project_upsert_sql
 
 pytestmark = pytest.mark.skipif(
@@ -111,6 +112,15 @@ def test_titre_modifie_invalide_lembedding(cur: psycopg.Cursor) -> None:
     assert titre == "Nouveau titre"
 
 
+def test_short_description_modifiee_invalide_lembedding(cur: psycopg.Cursor) -> None:
+    # Troisième colonne encodée : couverte par le test de chaîne, mais gratuite à exercer ici.
+    _insert_projet(cur, "p5", "Titre", "ancien resume", "desc")
+    _stage_projet(cur, "p5", "Titre", "nouveau resume", "desc")
+
+    vide, _, _ = _promouvoir(cur, "p5")
+    assert vide, "embedding conservé alors que short_description a changé"
+
+
 def test_texte_inchange_conserve_lembedding(cur: psycopg.Cursor) -> None:
     # Le garde-fou coûteux : un re-scrape ne change souvent que scraped_at. Invalider
     # ici, c'est réencoder les 21 k projets à chaque run (des heures de CPU).
@@ -127,3 +137,43 @@ def test_insertion_dun_nouveau_projet_laisse_lembedding_null(cur: psycopg.Cursor
 
     vide, _, _ = _promouvoir(cur, "p4")
     assert vide
+
+
+def _ecrire_embedding(cur: psycopg.Cursor, pid: str, snapshot: tuple[str, str, str | None]) -> int:
+    """Rejoue l'écriture d'embed à partir de son snapshot ; renvoie le nombre de lignes.
+
+    Dans le vrai run, le vecteur est calculé sur `_text_for(*snapshot)` ; ici sa valeur est
+    sans importance, seul compte le fait que l'écriture passe ou non.
+    """
+    cur.execute(_UPDATE_SQL, (_VEC, pid, *snapshot))
+    return cur.rowcount
+
+
+def test_course_promotion_pendant_encodage_nemet_pas_de_vecteur_perime(
+    cur: psycopg.Cursor,
+) -> None:
+    """embed garde son SELECT en mémoire des heures ; une promotion peut passer entre-temps."""
+    _insert_projet(cur, "p6", "Titre", "resume", None)
+    cur.execute("UPDATE projects SET embedding = NULL WHERE id = 'p6'")
+    snapshot = ("Titre", "resume", None)  # ce qu'embed a lu au début de son run
+
+    # La promotion tombe pendant l'encodage et enrichit la description.
+    _stage_projet(cur, "p6", "Titre", "resume", "description complete arrivee")
+    cur.execute(project_upsert_sql(), (_RUN_ID,))
+
+    # embed écrit enfin le vecteur calculé sur son texte périmé : doit être refusé.
+    assert _ecrire_embedding(cur, "p6", snapshot) == 0, "vecteur périmé écrit malgré la garde"
+
+    cur.execute("SELECT embedding IS NULL FROM projects WHERE id = 'p6'")
+    assert cur.fetchone()[0], "la ligne doit rester NULL pour être reprise à la passe suivante"  # type: ignore[index]
+
+
+def test_ecriture_embedding_passe_si_le_texte_na_pas_bouge(cur: psycopg.Cursor) -> None:
+    # Le cas nominal : sans promotion concurrente, la garde ne doit rien bloquer.
+    _insert_projet(cur, "p7", "Titre", "resume", "desc")
+    cur.execute("UPDATE projects SET embedding = NULL WHERE id = 'p7'")
+
+    assert _ecrire_embedding(cur, "p7", ("Titre", "resume", "desc")) == 1
+
+    cur.execute("SELECT embedding IS NULL FROM projects WHERE id = 'p7'")
+    assert not cur.fetchone()[0], "l'embedding aurait dû être écrit"  # type: ignore[index]

@@ -15,6 +15,9 @@ import argparse
 
 import psycopg
 
+# Attention : `pipeline.embed.embed` importe `pipeline.load.db`, donc les deux paquets se
+# référencent mutuellement. Ça ne tourne aujourd'hui que parce que les `__init__.py` de
+# `pipeline.load` et `pipeline.embed` sont vides — y ajouter un import créerait un cycle.
 from pipeline.embed.embed import EMBEDDED_TEXT_COLS
 from pipeline.load.db import connect
 
@@ -52,7 +55,10 @@ def project_upsert_sql() -> str:
     return (
         f"INSERT INTO projects ({_PROJECT_COLS}) "
         f"SELECT {_PROJECT_COLS} FROM projects_staging WHERE scrape_run_id = %s "
-        f"ON CONFLICT (id) DO UPDATE SET {', '.join(assignments)}"
+        f"ON CONFLICT (id) DO UPDATE SET {', '.join(assignments)} "
+        # Chiffre le réencodage que cette promotion déclenche : sans ça, des heures de CPU
+        # partent sans annonce (et sans humain devant l'écran, dans le workflow hebdo).
+        f"RETURNING (embedding IS NULL)"
     )
 
 
@@ -87,7 +93,10 @@ def promote(run_id: int | None) -> None:
             #    deux cas c'est l'étape embed qui le (re)calcule. fts est généré
             #    automatiquement.
             cur.execute(project_upsert_sql(), (run_id,))
-            promoted = cur.rowcount
+            lignes = cur.fetchall()
+            promoted = len(lignes)
+            # Insertions (embedding jamais calculé) + mises à jour dont le texte a changé.
+            a_encoder = sum(1 for (vide,) in lignes if vide)
 
             cur.execute(
                 "UPDATE scrape_runs SET status='promoted', n_promoted=%s, finished_at=now() "
@@ -97,6 +106,11 @@ def promote(run_id: int | None) -> None:
         conn.commit()
 
     print(f"Run #{run_id} promu : {promoted} projets dans `projects`.")
+    if a_encoder:
+        print(
+            f"{a_encoder} projets sans embedding (nouveaux, ou texte modifié donc invalidé) : "
+            f"lancer `python -m pipeline.embed.embed` pour les (ré)encoder."
+        )
 
 
 def main() -> None:
