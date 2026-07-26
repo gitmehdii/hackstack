@@ -39,7 +39,10 @@ _REMOTE_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 _model: SentenceTransformer | None = None
 _client: httpx.AsyncClient | None = None
-_lock = asyncio.Lock()
+# Un verrou par ressource : charger le modèle prend plusieurs secondes, et un seul verrou
+# partagé ferait attendre tout ce temps une requête qui n'a besoin que du client HTTP.
+_model_lock = asyncio.Lock()
+_client_lock = asyncio.Lock()
 
 
 def _normalize(vec: list[float]) -> list[float]:
@@ -54,8 +57,11 @@ def parse_embedding(payload: Any) -> list[float]:
 
     L'API renvoie une liste plate pour une entrée unique, mais certains backends
     l'enveloppent (`[[...]]`) : on accepte les deux plutôt que de dépendre de la forme.
+    Le déballage exige **exactement un** élément : une réponse à plusieurs vecteurs est
+    une réponse par token (pas de pooling), et prendre le premier renverrait le vecteur
+    d'un seul token sans que rien ne le signale.
     """
-    if isinstance(payload, list) and payload and isinstance(payload[0], list):
+    if isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], list):
         payload = payload[0]
     if not isinstance(payload, list) or not payload:
         raise ValueError(f"réponse d'encodage inattendue : {type(payload).__name__}")
@@ -77,7 +83,7 @@ def _load() -> SentenceTransformer:
 async def _get_model() -> SentenceTransformer:
     global _model
     if _model is None:
-        async with _lock:
+        async with _model_lock:
             if _model is None:  # re-vérifie sous verrou (double-checked locking)
                 _model = await asyncio.to_thread(_load)
     return _model
@@ -86,7 +92,7 @@ async def _get_model() -> SentenceTransformer:
 async def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None:
-        async with _lock:
+        async with _client_lock:
             if _client is None:
                 _client = httpx.AsyncClient(timeout=_REMOTE_TIMEOUT)
     return _client
@@ -99,7 +105,11 @@ async def _encode_local(text: str) -> list[float]:
         vec = model.encode([text], normalize_embeddings=True, show_progress_bar=False)
         return [float(v) for v in vec[0]]
 
-    return await asyncio.to_thread(_encode)
+    # Même validation que le backend distant : un `EMBED_MODEL` mal configuré (dimension
+    # différente) doit échouer ici, avec un message lisible. Sinon l'erreur ne surgit qu'au
+    # moment de la requête SQL, hors du try/except de `/search`, donc en 500 au lieu du
+    # repli full-text.
+    return parse_embedding(await asyncio.to_thread(_encode))
 
 
 async def _encode_remote(text: str) -> list[float]:
