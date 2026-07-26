@@ -12,20 +12,28 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.config import cors_origins
+from api.config import check_embed_config, cors_origins
 from api.db import make_pool
 from api.routers import hackathons, projects, search, stats, themes, trends
+from api.search_encoder import aclose as close_encoder
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    check_embed_config()
     pool = make_pool()
     await pool.open(wait=True)
     app.state.pool = pool
     try:
         yield
     finally:
-        await pool.close()
+        # Le pool doit être fermé même si la fermeture de l'encodeur échoue : sans ce
+        # try/finally imbriqué, une exception de `close_encoder` fuiterait les connexions
+        # Postgres à chaque redéploiement (et le tier gratuit Supabase en compte peu).
+        try:
+            await close_encoder()
+        finally:
+            await pool.close()
 
 
 app = FastAPI(
