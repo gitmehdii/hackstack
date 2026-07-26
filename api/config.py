@@ -50,6 +50,21 @@ def hf_embed_url() -> str:
     return f"{base}/models/{embed_model()}/pipeline/feature-extraction"
 
 
+def check_embed_config() -> None:
+    """Valide la config d'encodage au démarrage, pas à la première recherche.
+
+    `/search` rattrape toute erreur d'encodage en repli full-text (choix voulu face aux
+    pannes réseau). Une *mauvaise configuration* tomberait donc dans le même filet : l'API
+    répondrait 200, `/health` resterait vert, et la recherche sémantique ne marcherait
+    jamais sans que rien ne le dise. Autant refuser de démarrer.
+    """
+    if embed_backend() == "remote" and not hf_token():
+        raise RuntimeError(
+            "EMBED_BACKEND=remote exige HF_TOKEN : sans lui, /search se dégraderait "
+            "silencieusement en full-text à chaque requête"
+        )
+
+
 def excerpt_max_chars() -> int:
     """Longueur maximale de l'extrait de description exposé publiquement.
 

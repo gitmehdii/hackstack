@@ -11,7 +11,7 @@ from math import sqrt
 
 import pytest
 
-from api.config import embed_backend, hf_embed_url
+from api.config import check_embed_config, embed_backend, hf_embed_url
 from api.search_encoder import EMBED_DIM, parse_embedding
 
 
@@ -28,6 +28,13 @@ def test_parses_flat_vector_and_normalizes() -> None:
 def test_accepts_wrapped_vector() -> None:
     # Certains backends enveloppent la réponse dans une liste supplémentaire.
     assert parse_embedding([_vec()]) == parse_embedding(_vec())
+
+
+def test_rejects_per_token_response() -> None:
+    # Plusieurs vecteurs = réponse par token (pas de pooling). Prendre le premier
+    # renverrait le vecteur d'un seul token comme s'il représentait la requête.
+    with pytest.raises(ValueError):
+        parse_embedding([_vec(), _vec(), _vec()])
 
 
 def test_already_normalized_vector_is_unchanged() -> None:
@@ -66,6 +73,21 @@ def test_backend_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EMBED_BACKEND", "huggingface")
     with pytest.raises(RuntimeError, match="EMBED_BACKEND invalide"):
         embed_backend()
+
+
+def test_remote_backend_without_token_refuses_to_start(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Le repli full-text de /search rattraperait l'erreur à chaque requête : l'API
+    # répondrait 200 avec une recherche muette. Mieux vaut ne pas démarrer.
+    monkeypatch.setenv("EMBED_BACKEND", "remote")
+    monkeypatch.setenv("HF_TOKEN", "")
+    with pytest.raises(RuntimeError, match="HF_TOKEN"):
+        check_embed_config()
+
+
+def test_local_backend_needs_no_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMBED_BACKEND", "local")
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    check_embed_config()
 
 
 def test_inference_url_follows_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
