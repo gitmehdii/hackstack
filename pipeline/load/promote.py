@@ -15,6 +15,10 @@ import argparse
 
 import psycopg
 
+# Attention : `pipeline.embed.embed` importe `pipeline.load.db`, donc les deux paquets se
+# référencent mutuellement. Ça ne tourne aujourd'hui que parce que les `__init__.py` de
+# `pipeline.load` et `pipeline.embed` sont vides — y ajouter un import créerait un cycle.
+from pipeline.embed.embed import EMBEDDED_TEXT_COLS
 from pipeline.load.db import connect
 
 _PROJECT_COLS = (
@@ -23,6 +27,39 @@ _PROJECT_COLS = (
     "is_winner, prize_track, tech_stack, stack_source, team_size, team_name, "
     "repo_url, demo_url, scraped_at"
 )
+
+
+def project_upsert_sql() -> str:
+    """UPSERT projects_staging -> projects, avec invalidation de l'embedding.
+
+    `embedding` n'est pas dans `_PROJECT_COLS` : à l'INSERT il reste donc NULL (l'étape
+    embed le remplira), et à l'UPDATE il serait conservé tel quel. Or un re-scrape peut
+    enrichir le texte d'un projet déjà en base (devpost, qui n'a longtemps eu que
+    `short_description`) : le vecteur conservé aurait alors été calculé sur l'ANCIEN
+    texte, et `pipeline.embed.embed` ne le rattraperait jamais (il ne traite que
+    `WHERE embedding IS NULL`). On le remet donc à NULL — mais uniquement si le texte
+    encodé change réellement, réencoder tout le corpus coûtant des heures de CPU.
+
+    Le CASE est évalué sur la ligne d'AVANT mise à jour (sémantique ON CONFLICT de
+    Postgres), donc la comparaison `projects.x IS DISTINCT FROM EXCLUDED.x` reste
+    valide bien que `x` soit écrasé par le même ordre.
+    """
+    cols = [c.strip() for c in _PROJECT_COLS.split(",")]
+    assignments = [f"{c} = EXCLUDED.{c}" for c in cols if c != "id"]
+    text_changed = " OR ".join(
+        f"projects.{c} IS DISTINCT FROM EXCLUDED.{c}" for c in EMBEDDED_TEXT_COLS
+    )
+    assignments.append(
+        f"embedding = CASE WHEN {text_changed} THEN NULL ELSE projects.embedding END"
+    )
+    return (
+        f"INSERT INTO projects ({_PROJECT_COLS}) "
+        f"SELECT {_PROJECT_COLS} FROM projects_staging WHERE scrape_run_id = %s "
+        f"ON CONFLICT (id) DO UPDATE SET {', '.join(assignments)} "
+        # Chiffre le réencodage que cette promotion déclenche : sans ça, des heures de CPU
+        # partent sans annonce (et sans humain devant l'écran, dans le workflow hebdo).
+        f"RETURNING (embedding IS NULL)"
+    )
 
 
 def _latest_validated_run(cur: psycopg.Cursor) -> int:
@@ -51,20 +88,15 @@ def promote(run_id: int | None) -> None:
                 (run_id,),
             )
 
-            # 2. Projets. embedding reste NULL (rempli par l'étape embed) ;
-            #    fts est généré automatiquement.
-            set_clause = ", ".join(
-                f"{c} = EXCLUDED.{c}"
-                for c in _PROJECT_COLS.replace(" ", "").split(",")
-                if c != "id"
-            )
-            cur.execute(
-                f"INSERT INTO projects ({_PROJECT_COLS}) "
-                f"SELECT {_PROJECT_COLS} FROM projects_staging WHERE scrape_run_id = %s "
-                f"ON CONFLICT (id) DO UPDATE SET {set_clause}",
-                (run_id,),
-            )
-            promoted = cur.rowcount
+            # 2. Projets. À l'insertion embedding reste NULL, à la mise à jour il est
+            #    invalidé si le texte encodé change (cf. project_upsert_sql) ; dans les
+            #    deux cas c'est l'étape embed qui le (re)calcule. fts est généré
+            #    automatiquement.
+            cur.execute(project_upsert_sql(), (run_id,))
+            lignes = cur.fetchall()
+            promoted = len(lignes)
+            # Insertions (embedding jamais calculé) + mises à jour dont le texte a changé.
+            a_encoder = sum(1 for (vide,) in lignes if vide)
 
             cur.execute(
                 "UPDATE scrape_runs SET status='promoted', n_promoted=%s, finished_at=now() "
@@ -74,6 +106,11 @@ def promote(run_id: int | None) -> None:
         conn.commit()
 
     print(f"Run #{run_id} promu : {promoted} projets dans `projects`.")
+    if a_encoder:
+        print(
+            f"{a_encoder} projets sans embedding (nouveaux, ou texte modifié donc invalidé) : "
+            f"lancer `python -m pipeline.embed.embed` pour les (ré)encoder."
+        )
 
 
 def main() -> None:
