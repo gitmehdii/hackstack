@@ -608,8 +608,10 @@ Instantané de la base (docker local) et priorités des prochains jours. La stru
 
 1. **Finir le backfill embeddings** — relancer `python -m pipeline.embed.embed` (idempotent,
    `WHERE embedding IS NULL`). ~11 h sur CPU. Plus gros levier de qualité de la recherche.
-2. **Déployer la stack** — Supabase (base) + API sur VPS + front sur Vercel. Aujourd'hui aucun
-   site en ligne.
+2. **Déployer la stack** — Supabase (base) + API et front sur Vercel. Aujourd'hui aucun site
+   en ligne. **Le VPS est abandonné** (2026-07-26, décision utilisateur : plus de serveur, pas
+   envie d'en repayer un) : il n'était nécessaire qu'à cause des 2 Go de bge-m3 chargés dans le
+   process API. `EMBED_BACKEND=remote` supprime ce besoin (cf. sous-section ci-dessous).
 3. **Un scrape réel complet** (sans `--limit`) d'une source → `python -m pipeline.load.validate`
    → **approuver une fois** le décalage gagnants/non-gagnants → promotion. Allume les dates
    (trends 1 & 2 s'activent seules) et pousse les descriptions devpost fraîches (meilleurs
@@ -630,6 +632,40 @@ Instantané de la base (docker local) et priorités des prochains jours. La stru
    l'artefact public.
 7. **Étape 9 — agent mainteneur** : à ne commencer qu'après ~1 mois de tests de contrat
    (compteur démarré à l'Étape 7).
+
+### Hébergement sans VPS (2026-07-26)
+
+Contrainte nouvelle : plus de VPS, et pas de budget pour en relouer un. Ce qui a été vérifié
+plutôt que supposé :
+
+- **HF Spaces gratuit est éliminé** — la doc est explicite, les Spaces Docker et Gradio
+  « require a paid plan to create » (PRO à 9 $/mois) ; seuls les Spaces statiques sont libres.
+  Le compte est bien en plan gratuit (`plan: None`).
+- **L'inférence HF sur bge-m3 renvoie exactement le vecteur du modèle local** — mesuré :
+  dimension 1024, norme 1.0, **cosinus = 1.0** avec `SentenceTransformer.encode(…,
+  normalize_embeddings=True)`. C'est ce qui rend la bascule sûre : aucun ré-encodage des 21k
+  projets, aucune dérive de pertinence.
+- **API en backend `remote` : 81 Mo de RSS** au lieu de ~2 Go, recherche sémantique
+  fonctionnelle de bout en bout (requête « helping blind people navigate cities » → *Argus*,
+  *Second Eye*, *GuideBot* — des titres sans les mots de la requête, donc le bras vectoriel
+  travaille bien).
+
+Conséquence : Supabase (base) + Vercel (front **et** API en fonction serverless) suffisent, le
+tout en tier gratuit. Réserve mesurée : le quota d'inférence gratuit est de « 100 K crédits par
+mois », dont je ne sais pas traduire l'unité en nombre de recherches — à surveiller en vrai. Si
+le quota casse, `/search` retombe sur le full-text seul, chemin déjà en place.
+
+**Contrainte de taille à régler avant la migration.** La base locale pèse **274 Mo à 49 %
+d'embeddings**, dont 100 Mo pour le seul index HNSW ; à 100 % je projette ~420 Mo. Le tier
+gratuit Supabase plafonne à **500 Mo** (et met les projets en pause après 7 jours
+d'inactivité). Ça rentre, sans marge pour les scrapes suivants. Correctif retenu, à appliquer
+**après** la fin du backfill (un `ALTER TYPE` prend un verrou exclusif sur la table) :
+`vector(1024)` → **`halfvec(1024)`**, qui divise par deux la colonne *et* l'index (~280 Mo),
+pour une perte de rappel négligeable.
+
+Côté comptes : l'org Supabase « MDI's org » est **pleine** (2 projets sur un plan gratuit qui
+en autorise 2 : `gitmehdii's Project` actif, `readme-so-v2` en pause). Le nouveau projet ira
+donc dans l'org **« Claude project »**, vide — rien à supprimer ni à mettre en pause.
 
 Nettoyage mineur : les 3 runs `scraped` smoke (8/9/10) peuvent être supprimés ou validés (ils
 seraient rejetés — normal, batch de 15 lignes non représentatif).
