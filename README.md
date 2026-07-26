@@ -29,7 +29,9 @@ et analyse de tendances. Voir [PROJECT.md](PROJECT.md) pour la vision complète.
       baseline mobile/ancre, contrôles unilatéraux, seuils dans `thresholds.yaml`),
       statut `rejected` + rapport de diff, workflows GitHub Actions (CI + hebdo avec
       issue auto). Cf. [STATE.md](STATE.md).
-- [ ] Étape 8 — Dataset public
+- [x] **Étape 8 — Dataset public** : export parquet + carte de dataset prêts pour
+      HuggingFace, sans le texte intégral des descriptions (garde-fou testé). Écrit, **pas
+      encore publié** (attente des CGU + repo public). Cf. [STATE.md](STATE.md).
 - [ ] Étape 9 — Agent mainteneur
 
 ## Prérequis
@@ -93,7 +95,22 @@ dernières en ISR (`revalidate` 24 h, génération à la demande), avec métadon
 Recherche **hybride** : le bras vectoriel (pgvector `<=>`, index HNSW) et le bras
 full-text (`websearch_to_tsquery` sur `fts`, index GIN) sont fusionnés par **Reciprocal
 Rank Fusion** dans une seule requête SQL. La requête texte est vectorisée à la volée par
-bge-m3 (même modèle que les embeddings), chargé à la demande dans le process API.
+bge-m3 — **le même modèle que les embeddings stockés**, contrainte dure : en changer
+imposerait de ré-encoder les 21k projets.
+
+Deux backends d'encodage, via `EMBED_BACKEND` :
+
+| | `local` (défaut) | `remote` |
+|---|---|---|
+| Modèle | chargé en mémoire, ~2 Go | inférence HuggingFace, aucun poids |
+| RSS de l'API | ~2 Go | **~80 Mo** |
+| Dépendances | torch + sentence-transformers | un POST HTTP |
+| Requiert | rien | `HF_TOKEN` |
+
+Les deux produisent le **même vecteur** (vérifié : cosinus = 1.0 — l'endpoint HF renvoie du
+bge-m3 déjà normalisé). `remote` existe pour tenir dans un hébergement sans état, où 2 Go de
+poids ne rentrent pas ; `local` reste le défaut de dev, pour ne pas faire dépendre les tests
+d'un token et du réseau.
 
 ```bash
 # nécessite l'API lancée + des embeddings générés (python -m pipeline.embed.embed)
@@ -111,10 +128,11 @@ privée. Section « projets similaires » sur chaque page projet.
 > Le bras vectoriel se dégrade proprement en full-text seul quand un projet n'a pas encore
 > d'embedding : la recherche reste utilisable pendant le backfill des 21k embeddings.
 
-**Déploiement** (cible PROJECT.md) : front sur Vercel (`web/`, variables `API_URL` +
-`SITE_URL`, `API_URL` pointant vers l'API publique), API sur un VPS (`DATABASE_URL` +
-`API_CORS_ORIGINS` = domaine du front), base sur Supabase. Sitemap complet par projet
-reporté à l'Étape 3 (nécessite un endpoint de listing).
+**Déploiement** : front sur Vercel (`web/`, variables `API_URL` + `SITE_URL`), base sur
+Supabase, API en fonction serverless Vercel avec `EMBED_BACKEND=remote` (`DATABASE_URL` +
+`API_CORS_ORIGINS` = domaine du front). Le VPS que visait PROJECT.md n'est plus nécessaire :
+il ne l'était qu'à cause des 2 Go de bge-m3 dans le process API. Sitemap complet par projet
+reporté (nécessite un endpoint de listing).
 
 ## Thèmes et tech stack (Étape 4)
 
@@ -234,6 +252,30 @@ push/PR (sans DB ni réseau). [`weekly.yml`](.github/workflows/weekly.yml) : heb
 ouvre une issue en cas de rupture ; (2) si le secret `DATABASE_URL` est configuré, enchaîne
 scrape → validation → promotion et ouvre une issue sur rejet ou blocage. Sans le secret, le
 volet scrape live se saute proprement.
+
+## Dataset public (Étape 8)
+
+L'export produit un dossier autonome, poussable tel quel sur HuggingFace :
+`projects.parquet` (métadonnées, dérivés, URLs sources), `hackathons.parquet`,
+`embeddings.parquet` (vecteurs bge-m3, fichier séparé pour rester téléchargeable à part) et
+un `README.md` de carte de dataset (licence, attribution, couverture chiffrée du run).
+
+```bash
+python -m pipeline.export.dataset --out dist/hackstack-dataset --version 2026q3
+
+# Itération rapide (sans les vecteurs, sur un échantillon)
+python -m pipeline.export.dataset --out dist/d --no-embeddings --limit 500
+```
+
+**Le texte intégral des descriptions ne sort jamais** (contrainte PROJECT.md) : le dataset
+publie `source_url` plus `has_description` / `description_chars`, assez pour juger la
+complétude et remonter à la source, pas pour rediffuser le contenu. Les embeddings, eux,
+sont publiés — ils donnent la recherche sémantique sans le texte. `check_columns` verrouille
+l'invariant et les tests l'exercent colonne par colonne ; le schéma parquet est **déclaré**,
+pas inféré, pour qu'une colonne vide sur un export (aujourd'hui `hackathon_date`) ne change
+pas de type d'une release à l'autre.
+
+Publication en attente : lecture des CGU des trois sources, et passage du repo en public.
 
 ## Le corpus importé
 

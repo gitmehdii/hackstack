@@ -63,7 +63,9 @@ def main() -> None:
                 f"SELECT id, {', '.join(EMBEDDED_TEXT_COLS)} "
                 "FROM projects WHERE embedding IS NULL ORDER BY id"
             )
-            if args.limit:
+            # `is not None` et pas la simple vérité : `--limit 0` doit encoder zéro ligne,
+            # pas lancer le backfill complet par accident.
+            if args.limit is not None:
                 sql += f" LIMIT {int(args.limit)}"
             cur.execute(sql)
             rows = cur.fetchall()
@@ -72,6 +74,15 @@ def main() -> None:
         print(f"{total} projets à encoder.")
         if total == 0:
             return
+
+        # Trié par longueur : un batch est paddé à la longueur de son plus long texte, et le
+        # corpus va de 50 à 3 700 caractères. Grouper les tailles proches supprime ce padding
+        # perdu. Les embeddings sont inchangés (chaque texte est encodé indépendamment, le
+        # padding est masqué) — seul l'ordre d'écriture change, et il n'a pas d'importance.
+        # Tri **en place, lignes entières** : la garde optimiste plus bas a besoin du texte
+        # source de chaque ligne, pas seulement de son id. Réduire les lignes à (texte, id)
+        # ferait disparaître la garde sans qu'aucun test ne tombe.
+        rows.sort(key=lambda r: len(_text_for(*r[1:])))
 
         done = 0
         perimes = 0
@@ -97,10 +108,13 @@ def main() -> None:
 
     print(f"\nEmbeddings générés pour {done - perimes} projets.")
     if perimes:
-        # Non bloquant : ces lignes sont restées NULL, la prochaine passe les reprendra.
+        # Le compteur mesure des écritures qui n'ont pas eu lieu, pas une cause : une ligne
+        # supprimée en cours de run compte aussi. Le message énonce donc l'observation, pas
+        # le diagnostic. Non bloquant : ces lignes sont restées NULL, la passe suivante les
+        # reprendra.
         print(
-            f"{perimes} projets ignorés : leur texte a changé pendant l'encodage "
-            f"(promotion concurrente). Relancer pour les traiter."
+            f"{perimes} projets non écrits : leur texte a changé depuis la lecture, ou la "
+            f"ligne a disparu. Relancer pour les traiter."
         )
 
 
