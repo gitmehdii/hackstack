@@ -49,8 +49,7 @@ def cur() -> Iterator[psycopg.Cursor]:
             # de ligne scrape_runs.
             c.execute("CREATE TEMP TABLE projects (LIKE public.projects INCLUDING ALL)")
             c.execute(
-                "CREATE TEMP TABLE projects_staging "
-                "(LIKE public.projects_staging INCLUDING ALL)"
+                "CREATE TEMP TABLE projects_staging (LIKE public.projects_staging INCLUDING ALL)"
             )
             # Garde-fou : si le masquage échouait, l'UPSERT écrirait dans la vraie table.
             c.execute("SELECT 'projects'::regclass::oid, 'public.projects'::regclass::oid")
@@ -86,9 +85,7 @@ def _stage_projet(cur: psycopg.Cursor, pid: str, title: str, short: str, desc: s
 def _promouvoir(cur: psycopg.Cursor, pid: str) -> tuple[bool, str, str | None]:
     """Exécute l'UPSERT réel ; renvoie (embedding est NULL, titre, description)."""
     cur.execute(project_upsert_sql(), (_RUN_ID,))
-    cur.execute(
-        "SELECT embedding IS NULL, title, description FROM projects WHERE id = %s", (pid,)
-    )
+    cur.execute("SELECT embedding IS NULL, title, description FROM projects WHERE id = %s", (pid,))
     row = cur.fetchone()
     assert row is not None
     return bool(row[0]), str(row[1]), row[2]
