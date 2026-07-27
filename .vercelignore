@@ -1,0 +1,26 @@
+# Rien de ce qui suit n'est utile à la fonction API, et tout pèse lourd à l'upload.
+.venv/
+web/
+tests/
+db/
+.git/
+.http_cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+dist/
+# Le pipeline n'est pas déployé : seule `pipeline/normalize` (taxonomies YAML) est
+# importée par l'API, et `vercel.json` la réintègre explicitement.
+pipeline/scrapers/
+pipeline/contracts/
+pipeline/load/
+pipeline/embed/
+pipeline/export/
+
+# Vercel préfère uv.lock/pyproject.toml à requirements.txt et embarque alors TOUT le
+# projet — torch et sentence-transformers compris, soit 5 Go pour une limite de 500 Mo.
+# On ne livre que requirements.txt, qui liste les seules dépendances de l'API.
+pyproject.toml
+uv.lock

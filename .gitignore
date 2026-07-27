@@ -17,3 +17,6 @@ __pycache__/
 /models/
 # Cache HTTP local des scrapers (dev, Étape 6)
 .http_cache/
+
+# Vercel (identifiants de projet locaux, régénérés par `vercel link`)
+.vercel
