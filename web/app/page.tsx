@@ -1,6 +1,12 @@
-import { getStats } from "@/lib/api";
+import Link from "next/link";
+
+import { getStats, getThemes } from "@/lib/api";
 
 export const revalidate = 86400;
+
+// Nombre de thèmes proposés en entrée de parcours. Assez pour montrer la variété du
+// corpus, pas assez pour transformer la home en index — `/themes` est là pour ça.
+const HOME_THEMES = 12;
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
@@ -12,8 +18,14 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default async function HomePage() {
-  const stats = await getStats();
+  // Les deux appels sont indépendants : les paralléliser évite d'ajouter un aller-retour
+  // séquentiel au rendu de la page la plus visitée.
+  const [stats, themes] = await Promise.all([getStats(), getThemes()]);
   const fmt = new Intl.NumberFormat("fr-FR");
+  const topThemes = (themes?.themes ?? [])
+    .slice()
+    .sort((a, b) => b.project_count - a.project_count)
+    .slice(0, HOME_THEMES);
 
   return (
     <div className="space-y-10">
@@ -52,9 +64,39 @@ export default async function HomePage() {
         </section>
       )}
 
+      {topThemes.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-lg font-semibold">Explorer par thème</h2>
+            <Link href="/themes" className="text-sm text-neutral-500 hover:underline">
+              Tous les thèmes →
+            </Link>
+          </div>
+          <ul className="flex flex-wrap gap-2">
+            {topThemes.map((theme) => (
+              <li key={theme.slug}>
+                <Link
+                  href={`/theme/${theme.slug}`}
+                  className="inline-flex items-baseline gap-2 rounded-full border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
+                >
+                  {theme.label}
+                  <span className="text-xs tabular-nums text-neutral-500">
+                    {fmt.format(theme.project_count)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="text-sm text-neutral-500">
-        Les pages de tendances (volume par thème, stacks gagnantes) arrivent aux étapes
-        suivantes.
+        Voir aussi les{" "}
+        <Link href="/trends" className="underline hover:no-underline">
+          tendances
+        </Link>{" "}
+        : volume par thème, stacks sur-représentées chez les gagnants, avec les réserves
+        méthodologiques qui s&apos;imposent.
       </section>
     </div>
   );
