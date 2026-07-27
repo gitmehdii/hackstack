@@ -12,6 +12,31 @@ def database_url() -> str:
     return url
 
 
+def db_pool_max_size() -> int:
+    """Taille max du pool par process.
+
+    10 convient à un process long-vivant. En serverless, **chaque instance** ouvre son
+    propre pool : quelques instances concurrentes épuisent le quota de connexions Supabase.
+    Poser `DB_POOL_MAX_SIZE=2` sur Vercel, où le pooler côté serveur fait le vrai travail.
+    """
+    return int(os.environ.get("DB_POOL_MAX_SIZE", "10"))
+
+
+def db_prepare_threshold() -> int | None:
+    """Seuil de préparation des requêtes psycopg, ou None pour désactiver.
+
+    psycopg3 prépare automatiquement une requête après 5 exécutions identiques. Derrière le
+    pooler Supabase en **mode transaction** (port 6543), la connexion serveur change entre
+    les transactions : la requête préparée n'est plus là où on la cherche, et l'API se met à
+    échouer — mais seulement après la 5e exécution, donc pas au premier essai. Poser
+    `DB_PREPARE_THRESHOLD=none` quand on passe par le pooler.
+    """
+    raw = os.environ.get("DB_PREPARE_THRESHOLD", "").strip().lower()
+    if raw in {"none", "off", "disabled"}:
+        return None
+    return int(raw) if raw else 5
+
+
 def cors_origins() -> list[str]:
     """Origines autorisées pour le front (Vercel + dev local).
 
