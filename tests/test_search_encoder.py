@@ -11,7 +11,13 @@ from math import sqrt
 
 import pytest
 
-from api.config import check_embed_config, embed_backend, hf_embed_url
+from api.config import (
+    check_embed_config,
+    db_pool_max_size,
+    db_prepare_threshold,
+    embed_backend,
+    hf_embed_url,
+)
 from api.search_encoder import EMBED_DIM, parse_embedding
 
 
@@ -95,3 +101,19 @@ def test_inference_url_follows_the_model(monkeypatch: pytest.MonkeyPatch) -> Non
     # différent de celui du pipeline sans changer les deux ensemble.
     monkeypatch.setenv("EMBED_MODEL", "BAAI/bge-m3")
     assert hf_embed_url().endswith("/models/BAAI/bge-m3/pipeline/feature-extraction")
+
+
+def test_pool_defaut_convient_a_un_process_long_vivant(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DB_POOL_MAX_SIZE", raising=False)
+    monkeypatch.delenv("DB_PREPARE_THRESHOLD", raising=False)
+    assert db_pool_max_size() == 10
+    assert db_prepare_threshold() == 5
+
+
+def test_preparation_desactivable_pour_le_pooler(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Derrière le pooler Supabase en mode transaction, les requêtes préparées cassent —
+    # et seulement après la 5e exécution, donc pas au premier essai.
+    monkeypatch.setenv("DB_PREPARE_THRESHOLD", "none")
+    assert db_prepare_threshold() is None
+    monkeypatch.setenv("DB_POOL_MAX_SIZE", "2")
+    assert db_pool_max_size() == 2
