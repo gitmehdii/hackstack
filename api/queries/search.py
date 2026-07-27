@@ -3,10 +3,11 @@
 Deux bras exécutés en parallèle dans une seule requête :
 
 - **vectoriel** : plus proches voisins cosine (`embedding <=> :qvec`, index HNSW) ;
-- **lexical** : `websearch_to_tsquery` **relâché en OU** sur la colonne `fts` (index GIN),
-  classé par `ts_rank_cd`. La conjonction stricte de `websearch_to_tsquery` renvoyait 0
-  résultat sur une requête en langage naturel : le bras lexical, qui sert de filet quand
-  l'encodeur de requêtes est indisponible, s'éteignait là où il devait rattraper.
+- **lexical** : `websearch_to_tsquery` sur la colonne `fts` (index GIN), classé par
+  `ts_rank_cd`, **relâché en OU seulement si la conjonction stricte ne matche rien**. La
+  conjonction seule renvoyait 0 résultat sur une requête en langage naturel : le bras
+  lexical, qui sert de filet quand l'encodeur de requêtes est indisponible, s'éteignait là
+  où il devait rattraper.
 
 Les deux classements sont fusionnés par **Reciprocal Rank Fusion** (RRF) : chaque
 document reçoit `1/(k + rang)` dans chaque bras où il apparaît, on somme. RRF ne
@@ -125,12 +126,22 @@ async def search_projects(
         -- (« helping blind people navigate cities ») il ne remonte donc rien : mesuré, 0
         -- résultat contre 2 506 en OU. Le bras lexical est censé être le filet quand le
         -- vecteur est indisponible — il s'éteignait précisément là où il devait servir.
-        -- On relâche en OU : `ts_rank_cd` classe d'abord les documents contenant le plus de
-        -- termes, donc la précision reste en tête et le rappel suit derrière.
+        --
+        -- On garde donc la conjonction stricte **quand elle matche**, et on ne relâche en OU
+        -- que si elle ne renvoie rien. Deux raisons, toutes deux mesurées :
+        --   - un OU systématique fait perdre l'index GIN au planificateur (Seq Scan sur un
+        --     large vivier) : 2,5 ms → ~50 ms sur une requête courante ;
+        --   - le cas nominal reste ainsi *identique* à l'existant, au lieu d'être « vérifié
+        --     sur quelques exemples ».
+        -- Quand le OU s'applique, `ts_rank_cd` classe d'abord les documents contenant le plus
+        -- de termes : la précision reste en tête et le rappel suit derrière. Sans ce
+        -- classement, on remplacerait le vide par du bruit.
+        --
         -- Exception : si l'utilisateur a exclu un terme (`-foo` → `!foo`), relâcher
-        -- inverserait son intention. On garde alors la sémantique stricte.
+        -- inverserait son intention (`a | !b` matche presque tout). On reste strict.
         SELECT CASE
             WHEN s::text LIKE '%%!%%' THEN s
+            WHEN EXISTS (SELECT 1 FROM projects WHERE fts @@ s {filter_sql}) THEN s
             ELSE replace(s::text, ' & ', ' | ')::tsquery
         END AS q
         FROM websearch_to_tsquery('english', %(q)s) AS s
