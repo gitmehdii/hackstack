@@ -3,7 +3,10 @@
 Deux bras exécutés en parallèle dans une seule requête :
 
 - **vectoriel** : plus proches voisins cosine (`embedding <=> :qvec`, index HNSW) ;
-- **lexical** : `websearch_to_tsquery` sur la colonne `fts` (index GIN).
+- **lexical** : `websearch_to_tsquery` **relâché en OU** sur la colonne `fts` (index GIN),
+  classé par `ts_rank_cd`. La conjonction stricte de `websearch_to_tsquery` renvoyait 0
+  résultat sur une requête en langage naturel : le bras lexical, qui sert de filet quand
+  l'encodeur de requêtes est indisponible, s'éteignait là où il devait rattraper.
 
 Les deux classements sont fusionnés par **Reciprocal Rank Fusion** (RRF) : chaque
 document reçoit `1/(k + rang)` dans chaque bras où il apparaît, on somme. RRF ne
@@ -117,11 +120,26 @@ async def search_projects(
     sql = f"""
     WITH
     {vec_cte},
+    tsq AS (
+        -- `websearch_to_tsquery` exige TOUS les termes. Sur une requête en langage naturel
+        -- (« helping blind people navigate cities ») il ne remonte donc rien : mesuré, 0
+        -- résultat contre 2 506 en OU. Le bras lexical est censé être le filet quand le
+        -- vecteur est indisponible — il s'éteignait précisément là où il devait servir.
+        -- On relâche en OU : `ts_rank_cd` classe d'abord les documents contenant le plus de
+        -- termes, donc la précision reste en tête et le rappel suit derrière.
+        -- Exception : si l'utilisateur a exclu un terme (`-foo` → `!foo`), relâcher
+        -- inverserait son intention. On garde alors la sémantique stricte.
+        SELECT CASE
+            WHEN s::text LIKE '%%!%%' THEN s
+            ELSE replace(s::text, ' & ', ' | ')::tsquery
+        END AS q
+        FROM websearch_to_tsquery('english', %(q)s) AS s
+    ),
     fts AS (
-        SELECT id, row_number() OVER (ORDER BY ts_rank_cd(fts, q) DESC) AS rank
-        FROM projects, websearch_to_tsquery('english', %(q)s) q
-        WHERE fts @@ q {filter_sql}
-        ORDER BY ts_rank_cd(fts, q) DESC
+        SELECT id, row_number() OVER (ORDER BY ts_rank_cd(fts, tsq.q) DESC) AS rank
+        FROM projects, tsq
+        WHERE fts @@ tsq.q {filter_sql}
+        ORDER BY ts_rank_cd(fts, tsq.q) DESC
         LIMIT %(cand)s
     ),
     fused AS (
