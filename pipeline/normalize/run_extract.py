@@ -26,6 +26,7 @@ import argparse
 import os
 from collections.abc import Sequence
 
+import httpx
 import psycopg
 
 from pipeline.load.db import connect
@@ -72,6 +73,7 @@ def run_github(
     import json as _json
 
     done = 0
+    ignores = 0
     for pid, source, repo_url in rows:
         try:
             result = client.extract(str(repo_url))
@@ -79,6 +81,15 @@ def run_github(
             # PROJECT.md : on s'arrête, on ne contourne pas.
             print(f"\n[github] blocage GitHub, arrêt : {exc}")
             break
+        except httpx.HTTPError as exc:
+            # Aléa réseau (déconnexion, DNS, timeout) : on passe au projet suivant plutôt
+            # que de perdre le run. Observé deux fois sur des runs de plusieurs heures —
+            # une seule coupure transitoire tuait tout le travail restant. Un blocage
+            # GitHub, lui, reste distinct et interrompt bien la passe.
+            ignores += 1
+            if ignores <= 5 or ignores % 50 == 0:
+                print(f"\n[github] aléa réseau ignoré ({ignores}) sur {repo_url} : {exc}")
+            continue
         if result is None:
             continue
         with conn.cursor() as cur:
@@ -101,7 +112,10 @@ def run_github(
         conn.commit()
         done += 1
         print(f"  [github] {done}/{len(rows)}", end="\r", flush=True)
-    print(f"\n[github] {done} projets écrits en staging.")
+    suffixe = (
+        f" ({ignores} projets sautés sur aléa réseau, repris au prochain run)" if ignores else ""
+    )
+    print(f"\n[github] {done} projets écrits en staging.{suffixe}")
 
 
 def run_llm(
