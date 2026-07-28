@@ -32,7 +32,7 @@ _HIT_COLUMNS = """
     p.id, p.source, p.source_url, p.title,
     p.description, p.short_description,
     p.hackathon_slug, p.hackathon_name,
-    p.is_winner, p.placement, p.tech_stack
+    p.is_winner, p.placement, p.tech_stack, p.theme_tags
 """
 
 # Constante RRF : amortit le poids des tout premiers rangs. 60 est la valeur usuelle

@@ -80,6 +80,7 @@ class SearchHit(BaseModel):
     is_winner: bool
     placement: int | None
     tech_stack: list[str]
+    theme_tags: list[str]
     score: float
 
 

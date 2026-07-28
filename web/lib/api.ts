@@ -86,6 +86,7 @@ export type SearchHit = {
   is_winner: boolean;
   placement: number | null;
   tech_stack: string[];
+  theme_tags: string[];
   score: number;
 };
 

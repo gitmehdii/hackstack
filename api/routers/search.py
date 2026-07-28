@@ -39,6 +39,7 @@ def _to_hit(row: dict[str, Any]) -> SearchHit:
         is_winner=row["is_winner"],
         placement=row["placement"],
         tech_stack=row["tech_stack"],
+        theme_tags=row["theme_tags"],
         score=float(row["score"]),
     )
 

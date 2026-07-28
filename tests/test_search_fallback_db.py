@@ -63,3 +63,14 @@ def test_un_terme_exclu_reste_exclu() -> None:
         "un terme à la fois exigé et exclu doit ne rien renvoyer : la relaxation en OU "
         "s'est appliquée à une requête avec négation"
     )
+
+
+def test_les_resultats_portent_les_themes() -> None:
+    # `theme_tags` est renseigné sur 86 % du corpus, `tech_stack` sur 11 %. Les cartes de
+    # résultat n'affichaient que la stack : 9 sur 10 sortaient donc sans aucune puce alors
+    # que la donnée existait. Si ce champ disparaît des colonnes remontées, l'interface
+    # redevient nue sans qu'aucun test de rendu ne le voie.
+    rows = _chercher("carbon footprint tracking")
+    assert rows
+    assert all("theme_tags" in r for r in rows), "theme_tags absent des résultats"
+    assert any(r["theme_tags"] for r in rows), "aucun résultat de tête n'a de thème"
