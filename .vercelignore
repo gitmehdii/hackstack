@@ -1,6 +1,8 @@
 # Rien de ce qui suit n'est utile à la fonction API, et tout pèse lourd à l'upload.
 .venv/
-web/
+# `web/` n'est PAS exclu : le projet front est déployé depuis ce dossier
+# (rootDirectory=web) et l'exclure vidait son build. L'API n'embarque de
+# toute façon que ce que `vercel.json` liste dans includeFiles.
 tests/
 db/
 .git/
