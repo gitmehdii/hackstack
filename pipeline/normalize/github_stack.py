@@ -203,6 +203,11 @@ class GitHubStackClient:
 
         Renvoie une liste vide si la racine est illisible (dépôt vide, 404) : on préfère
         rater des manifestes que dépenser cinq appels à le vérifier.
+
+        Seule différence avec l'ancien sondage direct : GitHub plafonne ce listing à
+        1 000 entrées, donc un dépôt ayant plus de 1 000 fichiers à sa racine pourrait
+        voir son manifeste manqué. Cas assez théorique, et la dégradation est douce —
+        on retombe sur les seuls langages, comme quand un manifeste est absent.
         """
         resp = self._get(f"/repos/{owner}/{repo}/contents")
         if resp.status_code != 200:
