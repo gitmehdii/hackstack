@@ -10,6 +10,8 @@ import type { SearchHit, SearchResponse } from "@/lib/api";
 const SOURCES = ["lablab", "devpost", "ethglobal"] as const;
 
 function HitCard({ hit }: { hit: SearchHit }) {
+  const themes = hit.theme_tags ?? [];
+  const stack = hit.tech_stack ?? [];
   return (
     <li className="py-4">
       <div className="flex items-start justify-between gap-4">
@@ -40,10 +42,14 @@ function HitCard({ hit }: { hit: SearchHit }) {
           {/* Thèmes d'abord : ils sont renseignés sur 86 % du corpus, contre 11 % pour la
               stack. Afficher la seule stack laissait 9 cartes sur 10 sans aucune puce,
               alors que la donnée existait. */}
-          {(hit.theme_tags.length > 0 || hit.tech_stack.length > 0) && (
+          {/* `?? []` volontaire : le front et l'API sont deux projets Vercel distincts et
+              ne se déploient pas au même instant. Pendant la fenêtre où le front est à jour
+              et l'API pas encore, `theme_tags` est absent — sans ce garde, la page entière
+              planterait sur `.length`. */}
+          {(themes.length > 0 || stack.length > 0) && (
             <div className="flex flex-wrap items-center gap-2 pt-0.5">
-              {hit.theme_tags.length > 0 && <ThemeChips slugs={hit.theme_tags} />}
-              {hit.tech_stack.length > 0 && <TechChips items={hit.tech_stack} />}
+              {themes.length > 0 && <ThemeChips slugs={themes} />}
+              {stack.length > 0 && <TechChips items={stack} />}
             </div>
           )}
         </div>
