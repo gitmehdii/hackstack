@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { PlacementBadge, TechChips, sourceLabel } from "@/components/badges";
+import { PlacementBadge, TechChips, ThemeChips, sourceLabel } from "@/components/badges";
 import type { SearchHit, SearchResponse } from "@/lib/api";
 
 const SOURCES = ["lablab", "devpost", "ethglobal"] as const;
@@ -37,7 +37,15 @@ function HitCard({ hit }: { hit: SearchHit }) {
               {hit.description_excerpt}
             </p>
           )}
-          {hit.tech_stack.length > 0 && <TechChips items={hit.tech_stack} />}
+          {/* Thèmes d'abord : ils sont renseignés sur 86 % du corpus, contre 11 % pour la
+              stack. Afficher la seule stack laissait 9 cartes sur 10 sans aucune puce,
+              alors que la donnée existait. */}
+          {(hit.theme_tags.length > 0 || hit.tech_stack.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              {hit.theme_tags.length > 0 && <ThemeChips slugs={hit.theme_tags} />}
+              {hit.tech_stack.length > 0 && <TechChips items={hit.tech_stack} />}
+            </div>
+          )}
         </div>
       </div>
     </li>
