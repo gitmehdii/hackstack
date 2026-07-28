@@ -82,10 +82,23 @@ def _mock_client(handler: httpx.MockTransport) -> httpx.Client:
 
 
 def test_client_extract_combines_languages_and_manifests() -> None:
+    appels: list[str] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
+        appels.append(path)
         if path.endswith("/languages"):
             return httpx.Response(200, json={"Python": 1000, "TypeScript": 500})
+        if path.endswith("/contents"):
+            # Listing racine : seul requirements.txt est présent.
+            return httpx.Response(
+                200,
+                json=[
+                    {"name": "README.md", "type": "file"},
+                    {"name": "requirements.txt", "type": "file"},
+                    {"name": "src", "type": "dir"},
+                ],
+            )
         if path.endswith("/contents/requirements.txt"):
             body = base64.b64encode(b"langchain\nfastapi\n").decode()
             return httpx.Response(200, json={"content": body, "encoding": "base64"})
@@ -96,6 +109,43 @@ def test_client_extract_combines_languages_and_manifests() -> None:
     assert result is not None
     assert set(result.tech_stack) >= {"Python", "TypeScript", "LangChain", "FastAPI"}
     assert result.manifests == ["requirements.txt"]
+    # Le listing racine évite de sonder les manifestes absents : 3 appels au lieu de 6.
+    # C'est le coût réseau qui borne la passe (1 s par appel), pas le quota GitHub.
+    assert len(appels) == 3, appels
+    assert not any(p.endswith("/contents/package.json") for p in appels)
+
+
+def test_client_ignore_les_manifestes_hors_racine() -> None:
+    # Un manifeste dans un sous-dossier n'est pas listé comme fichier racine : on ne doit
+    # pas tenter de le lire (comportement identique à l'ancien sondage racine).
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/languages"):
+            return httpx.Response(200, json={"Go": 10})
+        if path.endswith("/contents"):
+            return httpx.Response(200, json=[{"name": "backend", "type": "dir"}])
+        raise AssertionError(f"appel inattendu : {path}")
+
+    client = GitHubStackClient(client=_mock_client(httpx.MockTransport(handler)), min_interval_s=0)
+    result = client.extract("https://github.com/foo/bar")
+    assert result is not None
+    assert result.manifests == []
+
+
+def test_client_survit_a_une_racine_illisible() -> None:
+    # Dépôt vide ou racine en 404 : on renvoie les langages sans manifeste, plutôt que
+    # de dépenser cinq appels à confirmer l'absence.
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/languages"):
+            return httpx.Response(200, json={"Rust": 42})
+        return httpx.Response(404, json={})
+
+    client = GitHubStackClient(client=_mock_client(httpx.MockTransport(handler)), min_interval_s=0)
+    result = client.extract("https://github.com/foo/bar")
+    assert result is not None
+    assert result.manifests == []
+    assert "Rust" in result.tech_stack
 
 
 def test_client_extract_returns_none_on_non_github() -> None:

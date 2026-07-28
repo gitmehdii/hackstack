@@ -14,6 +14,7 @@ un 403/blocage remonte tel quel et interrompt la passe.
 
 from __future__ import annotations
 
+import base64
 import re
 import time
 import tomllib
@@ -197,6 +198,24 @@ class GitHubStackClient:
             raise GitHubBlocked(f"403 GitHub sur {path}")
         return resp
 
+    def _root_manifests(self, owner: str, repo: str) -> list[str]:
+        """Manifestes de `MANIFESTS` présents à la racine du dépôt, en un seul appel.
+
+        Renvoie une liste vide si la racine est illisible (dépôt vide, 404) : on préfère
+        rater des manifestes que dépenser cinq appels à le vérifier.
+        """
+        resp = self._get(f"/repos/{owner}/{repo}/contents")
+        if resp.status_code != 200:
+            return []
+        try:
+            entries = resp.json()
+        except ValueError:
+            return []
+        if not isinstance(entries, list):
+            return []
+        noms = {e.get("name") for e in entries if isinstance(e, dict) and e.get("type") == "file"}
+        return [m for m in MANIFESTS if m in noms]
+
     def extract(self, repo_url: str) -> GitHubResult | None:
         """tech_stack fiable pour un repo, ou None si l'URL/le repo est inexploitable."""
         parsed = parse_repo_url(repo_url)
@@ -211,8 +230,14 @@ class GitHubStackClient:
         if langs_resp.status_code == 200:
             languages = {str(k): int(v) for k, v in langs_resp.json().items()}
 
+        # Un listing de la racine plutôt qu'un sondage par manifeste : la plupart des
+        # dépôts n'en ont qu'un, donc sonder les cinq à l'aveugle coûtait 5 appels dont 4
+        # en 404. Avec le throttle d'une seconde par appel, c'était 6 s par projet contre
+        # ~3 ici. Sémantique inchangée : on ne regarde que la racine, comme avant.
+        present = self._root_manifests(owner, repo)
+
         manifest_texts: dict[str, str] = {}
-        for name in MANIFESTS:
+        for name in present:
             r = self._get(f"/repos/{owner}/{repo}/contents/{name}")
             if r.status_code != 200:
                 continue
@@ -220,8 +245,6 @@ class GitHubStackClient:
             content = payload.get("content")
             if not content or payload.get("encoding") != "base64":
                 continue
-            import base64
-
             try:
                 manifest_texts[name] = base64.b64decode(content).decode("utf-8", "replace")
             except (ValueError, UnicodeDecodeError):
