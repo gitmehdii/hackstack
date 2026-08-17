@@ -16,6 +16,13 @@ longueur suffisante** pour que les invariants de parsing tiennent (les tests vé
   - lablab : le champ `description` de chaque submission (le `shortDescription`, un extrait
     court, est conservé — c'est ce que le site expose déjà publiquement).
 
+Les captures embarquent aussi les **identifiants côté client du site capturé** (clé Google
+Maps, clé Mixpanel, jeton CSRF de session). Ils appartiennent au site d'origine et non à ce
+projet, mais republier la clé d'un tiers dans un repo indexé alimente l'abus de son quota et
+déclenche le secret scanning de GitHub. `scrub_credentials` les neutralise sur *toutes* les
+fixtures ; aucun test ne lit ces balises. Les identifiants Google Analytics (`UA-…`) sont
+laissés : ce sont des identifiants de suivi publics par nature, pas des secrets.
+
 Ré-exécutable et idempotent : à relancer si une fixture est re-capturée.
 
     python -m pipeline.contracts.scrub_fixtures            # scrub en place
@@ -133,6 +140,31 @@ def scrub_devpost_software(html: str) -> str:
     return _META_RE.sub(_scrub_meta, html)
 
 
+# --------------------------------------------------------------------------- identifiants
+
+FILLER_CREDENTIAL = "scrubbed-during-fixture-capture"
+
+# Balises `<meta>` portant un identifiant client du site capturé : `*-api-key` (Google Maps,
+# Mixpanel) et `csrf-token`. On ne liste pas les valeurs d'origine ici — les inscrire en dur
+# remettrait le secret dans le repo, ce que ce module cherche justement à éviter.
+_CREDENTIAL_META_RE = re.compile(
+    r'(<meta\b[^>]*\bname="(?:[a-z-]*-api-key|csrf-token)"[^>]*\bcontent=")([^"]*)(")'
+)
+
+
+def scrub_credentials(text: str) -> str:
+    return _CREDENTIAL_META_RE.sub(
+        lambda m: f"{m.group(1)}{FILLER_CREDENTIAL}{m.group(3)}", text
+    )
+
+
+# Toute balise d'identifiant dont le contenu n'est pas le filler est un résidu.
+_CREDENTIAL_RESIDUE_RE = re.compile(
+    r'<meta\b[^>]*\bname="(?:[a-z-]*-api-key|csrf-token)"[^>]*\bcontent="'
+    rf'(?!{re.escape(FILLER_CREDENTIAL)}")[^"]+"'
+)
+
+
 # --------------------------------------------------------------------------- lablab
 
 
@@ -168,12 +200,20 @@ _RESIDUES = (
 
 
 def apply_all() -> None:
-    for name, fn in _TARGETS.items():
-        path = FIXTURES / name
+    # Les identifiants sont neutralisés sur *toutes* les fixtures (ils apparaissent aussi dans
+    # des captures qui n'ont pas de scrub de description, comme devpost_gallery.html) ; le
+    # scrub de description, lui, reste piloté par `_TARGETS`.
+    for path in sorted(FIXTURES.iterdir()):
+        if not path.is_file():
+            continue
         text = path.read_text(encoding="utf-8")
-        scrubbed = fn(text)
-        path.write_text(scrubbed, encoding="utf-8")
-        print(f"scrub {name}")
+        scrubbed = scrub_credentials(text)
+        fn = _TARGETS.get(path.name)
+        if fn is not None:
+            scrubbed = fn(scrubbed)
+        if scrubbed != text:
+            path.write_text(scrubbed, encoding="utf-8")
+            print(f"scrub {path.name}")
 
 
 def check() -> int:
@@ -183,10 +223,12 @@ def check() -> int:
         for residue in _RESIDUES:
             if residue in blob:
                 bad.append(f"{path.name}: {residue!r}")
+        for m in _CREDENTIAL_RESIDUE_RE.finditer(blob):
+            bad.append(f"{path.name}: identifiant tiers non neutralisé — {m.group(0)[:70]}")
     if bad:
-        print("RÉSIDUS de description détectés :", *bad, sep="\n  ", file=sys.stderr)
+        print("RÉSIDUS détectés :", *bad, sep="\n  ", file=sys.stderr)
         return 1
-    print("OK : aucun résidu de description intégrale dans les fixtures.")
+    print("OK : ni description intégrale ni identifiant tiers dans les fixtures.")
     return 0
 
 
