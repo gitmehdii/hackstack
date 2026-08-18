@@ -220,15 +220,45 @@ export type SimilarProject = {
   distance: number;
 };
 
-async function fetchJson<T>(path: string): Promise<T | null> {
-  const res = await fetch(`${apiBaseUrl()}${path}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
-    headers: { accept: "application/json" },
-  });
+// `tolerateOutage` fait retomber une API *indisponible* (5xx, ou injoignable) sur `null`
+// au lieu de lever. Réservé aux pages d'index, qui savent toutes afficher un état vide.
+//
+// La raison est un incident réel : la base s'est arrêtée, `/stats` a renvoyé 500, et le
+// prérendu de `/` a fait échouer le build entier. Le front est resté non déployable pendant
+// trois semaines, pendant que Vercel continuait de servir le dernier build réussi — donc
+// le site avait l'air vivant. Un front doit pouvoir se déployer même API éteinte.
+//
+// Volontairement NON appliqué aux pages de détail : là, `null` veut dire « ce projet
+// n'existe pas » et déclenche un notFound() mis en cache. Confondre une panne avec une
+// absence transformerait une base endormie en 404 durables sur des pages valides.
+// Un 4xx autre que 404 lève dans tous les cas : c'est un bug d'appel, pas une panne.
+type FetchOptions = { tolerateOutage?: boolean };
+
+async function fetchJson<T>(
+  path: string,
+  { tolerateOutage = false }: FetchOptions = {},
+): Promise<T | null> {
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseUrl()}${path}`, {
+      next: { revalidate: REVALIDATE_SECONDS },
+      headers: { accept: "application/json" },
+    });
+  } catch (err) {
+    if (tolerateOutage) {
+      console.error(`API injoignable sur ${path}, rendu en état vide`, err);
+      return null;
+    }
+    throw err;
+  }
   if (res.status === 404) {
     return null;
   }
   if (!res.ok) {
+    if (tolerateOutage && res.status >= 500) {
+      console.error(`API ${path} → ${res.status}, rendu en état vide`);
+      return null;
+    }
     throw new Error(`API ${path} → ${res.status}`);
   }
   return (await res.json()) as T;
@@ -243,11 +273,11 @@ export function getHackathon(slug: string): Promise<HackathonDetail | null> {
 }
 
 export async function getStats(): Promise<Stats | null> {
-  return fetchJson<Stats>(`/stats`);
+  return fetchJson<Stats>(`/stats`, { tolerateOutage: true });
 }
 
 export async function getThemes(): Promise<ThemeListResponse | null> {
-  return fetchJson<ThemeListResponse>(`/themes`);
+  return fetchJson<ThemeListResponse>(`/themes`, { tolerateOutage: true });
 }
 
 export function getTheme(slug: string): Promise<ThemeDetail | null> {
@@ -255,7 +285,7 @@ export function getTheme(slug: string): Promise<ThemeDetail | null> {
 }
 
 export function getTrends(): Promise<TrendsOverview | null> {
-  return fetchJson<TrendsOverview>(`/trends`);
+  return fetchJson<TrendsOverview>(`/trends`, { tolerateOutage: true });
 }
 
 // Projets similaires : rendu côté serveur sur la page projet (donc mis en cache ISR

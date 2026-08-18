@@ -37,6 +37,28 @@ def db_prepare_threshold() -> int | None:
     return int(raw) if raw else 5
 
 
+def db_pool_timeout() -> float:
+    """Attente max d'une connexion du pool, en secondes.
+
+    Le défaut de psycopg_pool est 30 s. C'est trop long ici : quand la base est absente,
+    chaque requête immobilise une fonction serverless pendant 30 s avant de renvoyer son
+    503, et le front reste bloqué autant. On échoue vite, quitte à réessayer — 10 s laissent
+    largement la place à une connexion froide vers Supabase.
+    """
+    return float(os.environ.get("DB_POOL_TIMEOUT", "10"))
+
+
+def health_db_timeout() -> float:
+    """Délai laissé à la sonde base de `/health`, en secondes.
+
+    Court exprès : `/health` doit répondre, pas attendre. Le délai par défaut du pool est
+    de 30 s, ce qui est la bonne valeur pour une requête métier et la mauvaise pour un
+    diagnostic — un endpoint de santé qui met 30 s à dire « la base est morte » ne sert à
+    personne, et dépasse le budget de la plupart des sondes.
+    """
+    return float(os.environ.get("HEALTH_DB_TIMEOUT", "3"))
+
+
 def cors_origins() -> list[str]:
     """Origines autorisées pour le front (Vercel + dev local).
 
