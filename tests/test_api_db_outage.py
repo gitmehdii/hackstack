@@ -39,12 +39,13 @@ def client_without_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setenv("EMBED_BACKEND", "remote")
     monkeypatch.setenv("HF_TOKEN", "test-token")
 
-    import importlib
+    # Pas de rechargement du module : `api.main` ne lit rien de l'environnement à l'import,
+    # tout passe par le lifespan, déclenché à l'entrée du TestClient. Un `importlib.reload`
+    # ici laisserait `api.main` reconstruit avec l'environnement de test dans `sys.modules`,
+    # donc empoisonnerait tout test ultérieur qui importerait l'app.
+    from api.main import app
 
-    import api.main
-
-    importlib.reload(api.main)
-    with TestClient(api.main.app) as client:
+    with TestClient(app) as client:
         yield client
 
 
