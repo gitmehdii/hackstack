@@ -21,7 +21,7 @@ from api.db import make_pool
 from api.routers import hackathons, projects, search, stats, themes, trends
 from api.search_encoder import aclose as close_encoder
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -84,7 +84,7 @@ async def database_unavailable(request: Request, exc: psycopg.OperationalError) 
     distinction compte pour qui appelle l'API : un 500 dit « ce service est cassé », un 503
     dit « il est vivant mais sa dépendance est absente », ce qui est réessayable.
     """
-    log.warning("base indisponible sur %s: %s", request.url.path, exc)
+    logger.warning("base indisponible sur %s", request.url.path, exc_info=exc)
     return JSONResponse(
         status_code=503,
         content={"detail": "Base de données indisponible"},
@@ -103,8 +103,13 @@ async def health(request: Request) -> JSONResponse:
     try:
         async with pool.connection(timeout=health_db_timeout()) as conn:
             await conn.execute("SELECT 1")
-    except Exception as exc:  # noqa: BLE001 - toute panne se rapporte pareil ici
-        log.warning("sonde base en échec: %s", exc)
+    except psycopg.OperationalError:
+        # Volontairement étroit. `PoolTimeout`, `PoolClosed` et `TooManyRequests` héritent
+        # tous de `OperationalError`, donc tout ce que le pool sait lever est couvert. Un
+        # `except Exception` couvrirait aussi les bugs d'ici même, et les rapporterait en
+        # « database: down » : l'endpoint censé nommer le coupable désignerait le mauvais.
+        # Le reste doit remonter en 500, qui est la vérité dans ce cas.
+        logger.warning("sonde base en échec", exc_info=True)
         return JSONResponse(
             status_code=503,
             content={"status": "degraded", "database": "down"},

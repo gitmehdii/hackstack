@@ -49,10 +49,17 @@ def client_without_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
         yield client
 
 
-def test_app_starts_without_database(client_without_db: TestClient) -> None:
-    """Le lifespan ne doit plus échouer : c'est ce qui privait l'app de toutes ses routes."""
-    # Si le démarrage avait échoué, le TestClient aurait leve avant d'arriver ici.
-    assert client_without_db.app is not None
+def test_app_serves_its_routes_without_database(client_without_db: TestClient) -> None:
+    """Le routage doit exister sans base : c'est exactement ce que la panne détruisait.
+
+    Deux gardes se cumulent ici. `TestClient.__enter__` propage l'échec du lifespan
+    (vérifié), donc avec `wait=True` ce test échouerait dès l'entrée du fixture. Et comme
+    cette garde-là est invisible dans le corps du test, on vérifie en plus que l'app sert
+    vraiment ses routes, sur un endpoint qui ne touche pas la base.
+    """
+    res = client_without_db.get("/openapi.json")
+    assert res.status_code == 200
+    assert "/stats" in res.json()["paths"]
 
 
 def test_health_answers_and_names_the_culprit(client_without_db: TestClient) -> None:

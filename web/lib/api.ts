@@ -288,17 +288,25 @@ export function getTrends(): Promise<TrendsOverview | null> {
   return fetchJson<TrendsOverview>(`/trends`, { tolerateOutage: true });
 }
 
-// Projets similaires : rendu côté serveur sur la page projet (donc mis en cache ISR
-// avec elle). Renvoie [] si l'API échoue ou si le projet n'a pas encore d'embedding.
+// Projets similaires : rendu côté serveur sur la page projet (donc mis en cache ISR avec
+// elle). Renvoie [] si l'API échoue ou si le projet n'a pas encore d'embedding.
+//
+// Passe par `fetchJson` pour qu'il n'existe qu'une seule définition de « l'API est en
+// panne ». Cette fonction refaisait la requête à la main et avait déjà divergé : elle ne
+// rattrapait pas du tout le rejet de `fetch`, donc une API *injoignable* — le cas même que
+// ce module cherche à survivre — levait ici et emportait la page projet.
+//
+// Le catch reste plus large que `tolerateOutage` : c'est un bloc décoratif, et même un 4xx
+// (bug d'appel) ne doit pas faire disparaître une page projet par ailleurs valide. On perd
+// la section, pas la page.
 export async function getSimilar(id: string, limit = 6): Promise<SimilarProject[]> {
-  const res = await fetch(
-    `${apiBaseUrl()}/projects/${encodeURIComponent(id)}/similar?limit=${limit}`,
-    { next: { revalidate: REVALIDATE_SECONDS }, headers: { accept: "application/json" } },
-  );
-  if (!res.ok) {
+  const path = `/projects/${encodeURIComponent(id)}/similar?limit=${limit}`;
+  try {
+    return (await fetchJson<SimilarProject[]>(path, { tolerateOutage: true })) ?? [];
+  } catch (err) {
+    console.error(`Projets similaires indisponibles pour ${id}`, err);
     return [];
   }
-  return (await res.json()) as SimilarProject[];
 }
 
 // Recherche : appelée côté serveur par le Route Handler /api/search, qui relaie la
