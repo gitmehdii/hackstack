@@ -153,9 +153,7 @@ _CREDENTIAL_META_RE = re.compile(
 
 
 def scrub_credentials(text: str) -> str:
-    return _CREDENTIAL_META_RE.sub(
-        lambda m: f"{m.group(1)}{FILLER_CREDENTIAL}{m.group(3)}", text
-    )
+    return _CREDENTIAL_META_RE.sub(lambda m: f"{m.group(1)}{FILLER_CREDENTIAL}{m.group(3)}", text)
 
 
 # Toute balise d'identifiant dont le contenu n'est pas le filler est un résidu.
